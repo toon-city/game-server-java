@@ -3,17 +3,20 @@ package live.toon.server.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * Read-only mapping of the shared {@code users} table (owned by game-api).
- * The game-server never writes to this table — it only reads profile data
- * (gender, rank, toonizLevel) so that room events always carry fresh values.
+ * Partial mapping of the shared {@code users} table (owned by game-api).
+ * The game-server reads profile data and writes presence fields only
+ * (online, current_room_id).
  */
 @Entity
 @Table(name = "users")
 @Getter
+@Setter
 @NoArgsConstructor
 public class User {
 
@@ -34,4 +37,16 @@ public class User {
     /** 0 = none, 1/2/3 */
     @Column(name = "tooniz_level", nullable = false)
     private int toonizLevel;
+
+    /** Whether the user is currently connected. */
+    @Column(nullable = false)
+    private boolean online = false;
+
+    /** ID of the room the user is currently in, or null. */
+    @Column(name = "current_room_id")
+    private Long currentRoomId;
+
+    /** Last login timestamp — updated on every WebSocket connection. */
+    @Column(name = "last_login_at")
+    private OffsetDateTime lastLoginAt;
 }

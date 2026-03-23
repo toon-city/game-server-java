@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -31,24 +32,36 @@ public class RoomStompController {
 
     @MessageMapping("/join")
     @SendToUser("/queue/state")
-    public RoomStateEvent join(@Payload JoinPayload payload, Principal principal) {
+    public RoomStateEvent join(@Payload JoinPayload payload, Principal principal,
+                               SimpMessageHeaderAccessor headerAccessor) {
         UserPrincipal user = extractPrincipal(principal);
         String roomId = payload.getRoomId();
+        // Use the real STOMP session ID (not principal.getName())
+        String sessionId = headerAccessor.getSessionId();
 
-        var roomOpt = roomStateService.join(
-                roomId,
-                sessionId(principal),
-                user,
-                payload.getAvatarOptions(),
-                payload.getX(),
-                payload.getY());
+        var resultOpt = roomStateService.join(
+                roomId, sessionId, user,
+                payload.getAvatarOptions(), payload.getX(), payload.getY());
 
-        if (roomOpt.isEmpty()) {
+        if (resultOpt.isEmpty()) {
             messaging.convertAndSendToUser(
                     user.getUserId().toString(),
                     "/queue/error",
                     new ErrorEvent("NOT_FOUND", "Room not found: " + roomId));
             return null;
+        }
+
+        RoomStateService.JoinResult result = resultOpt.get();
+
+        // If an old session was evicted, notify it so the client can disconnect gracefully.
+        // We send directly to the session-specific internal destination (/queue/kicked-user{sessionId})
+        // to avoid broadcasting to the NEW session which has the same userId.
+        if (result.hasEviction()) {
+            messaging.convertAndSend(
+                    "/queue/kicked-user" + result.evictedSessionId(),
+                    new KickedEvent("DUPLICATE_SESSION",
+                            "Vous avez été déconnecté car vous vous êtes connecté ailleurs."));
+            log.info("Sent kick to session {} (duplicate session)", result.evictedSessionId());
         }
 
         // Broadcast to room: user joined
@@ -65,7 +78,7 @@ public class RoomStompController {
                         .toonizLevel(user.getToonizLevel())
                         .build());
 
-        return roomStateService.buildRoomState(roomOpt.get());
+        return roomStateService.buildRoomState(result.room());
     }
 
     // ─── /app/leave ──────────────────────────────────────────────────────────
@@ -195,15 +208,10 @@ public class RoomStompController {
         return (UserPrincipal) auth.getPrincipal();
     }
 
-    private String sessionId(Principal principal) {
-        // Spring Security principal name is the session ID in STOMP context
-        return principal.getName();
-    }
-
     private static String roomTopic(String roomId, String event) {
         return "/topic/room/" + roomId + "/" + event;
     }
 
-    // Simple error envelope
     record ErrorEvent(String code, String message) {}
+    record KickedEvent(String code, String message) {}
 }

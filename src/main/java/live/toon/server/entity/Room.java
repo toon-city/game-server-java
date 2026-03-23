@@ -29,6 +29,11 @@ public class Room {
     @Column(name = "max_users", nullable = false)
     private int maxUsers = 50;
 
+    /** Number of users currently present in this room. Persisted for fast lobby queries. */
+    @Builder.Default
+    @Column(name = "user_count", nullable = false)
+    private int userCount = 0;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
