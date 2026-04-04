@@ -6,8 +6,8 @@ import lombok.Data;
 @Data
 public class JoinPayload {
     private String roomId;
-    /** Avatar options as a JSON object (forwarded as-is). */
-    private Object avatarOptions;
+    /** Direction initiale de l'avatar (1-8). */
+    private int direction;
     private double x;
     private double y;
 }

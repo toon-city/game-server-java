@@ -3,9 +3,11 @@ package live.toon.server.service;
 import live.toon.server.dto.event.RoomStateEvent;
 import live.toon.server.entity.Room;
 import live.toon.server.entity.User;
+import live.toon.server.entity.UserItem;
 import live.toon.server.model.ConnectedUser;
 import live.toon.server.model.UserPrincipal;
 import live.toon.server.repository.RoomRepository;
+import live.toon.server.repository.UserItemRepository;
 import live.toon.server.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +31,7 @@ public class RoomStateService {
 
     private final RoomRepository roomRepository;
     private final UserRepository userRepository;
+    private final UserItemRepository userItemRepository;
 
     /**
      * roomId → (userId → ConnectedUser)
@@ -74,7 +77,7 @@ public class RoomStateService {
      */
     @Transactional
     public Optional<JoinResult> join(String roomId, String sessionId, UserPrincipal principal,
-                                     Object avatarOptions, double x, double y) {
+                                     int direction, double x, double y) {
         Optional<Room> roomOpt = roomRepository.findById(Long.parseLong(roomId));
         if (roomOpt.isEmpty()) return Optional.empty();
 
@@ -101,19 +104,24 @@ public class RoomStateService {
         String gender    = dbUser != null ? dbUser.getGender()      : principal.getGender();
         int    rank      = dbUser != null ? dbUser.getRank()        : principal.getRank();
         int    toonizLvl = dbUser != null ? dbUser.getToonizLevel() : principal.getToonizLevel();
+        int    skinColor = dbUser != null && dbUser.getSkinColor() != null ? dbUser.getSkinColor() : 0xf7ceaf;
+
+        // ── Charger les vêtements équipés depuis la DB ────────────────────────
+        Map<String, String> clothing = buildClothingMap(principal.getUserId());
 
         rooms.computeIfAbsent(roomId, k -> new ConcurrentHashMap<>())
                 .put(userId, ConnectedUser.builder()
                         .userId(principal.getUserId())
                         .username(principal.getUsername())
                         .sessionId(sessionId)
-                        .avatarOptionsJson(avatarOptions != null ? avatarOptions.toString() : "{}")
+                        .skinColor(skinColor)
+                        .clothing(clothing)
                         .gender(gender)
                         .rank(rank)
                         .toonizLevel(toonizLvl)
                         .x(x)
                         .y(y)
-                        .direction(0)
+                        .direction(direction)
                         .build());
 
         sessionIndex.put(sessionId, new RoomMembership(roomId, userId));
@@ -225,7 +233,8 @@ public class RoomStateService {
                 .map(u -> RoomStateEvent.UserSnapshot.builder()
                         .userId(u.getUserId().toString())
                         .username(u.getUsername())
-                        .avatarOptions(u.getAvatarOptionsJson())
+                        .skinColor(u.getSkinColor())
+                        .clothing(u.getClothing())
                         .x(u.getX())
                         .y(u.getY())
                         .direction(u.getDirection())
@@ -241,6 +250,44 @@ public class RoomStateService {
                 .houseData(room.getHouseData())
                 .users(snapshots)
                 .build();
+    }
+
+    // ── Clothing helpers ──────────────────────────────────────────────────────
+
+    /**
+     * Charge les vêtements équipés depuis la DB et retourne la map slot → sprite.
+     * Ex : { "hair" → "hair7", "hat" → "hat_april1" }
+     */
+    public Map<String, String> buildClothingMap(UUID userId) {
+        return userItemRepository
+                .findByUserIdAndEquippedTrueAndItemItemType(userId, "CLOTHING")
+                .stream()
+                .filter(ui -> ui.getItem().getSpriteKey() != null && ui.getItem().getSpritePath() != null)
+                .collect(Collectors.toMap(
+                        ui -> ui.getItem().getSpriteKey(),
+                        ui -> ui.getItem().getSpritePath(),
+                        (a, b) -> a // en cas de doublon garder le premier
+                ));
+    }
+
+    /**
+     * Re-charge les vêtements équipés depuis la DB pour un utilisateur dans une room
+     * et met à jour son ConnectedUser en mémoire.
+     * Retourne le ConnectedUser mis à jour, ou empty si l'utilisateur n'est pas dans cette room.
+     */
+    public Optional<ConnectedUser> refreshClothing(String roomId, String userId) {
+        var roomUsers = rooms.get(roomId);
+        if (roomUsers == null) return Optional.empty();
+        ConnectedUser cu = roomUsers.get(userId);
+        if (cu == null) return Optional.empty();
+        try {
+            UUID userUuid = UUID.fromString(userId);
+            Map<String, String> clothing = buildClothingMap(userUuid);
+            cu.setClothing(clothing);
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid userId in refreshClothing: {}", userId);
+        }
+        return Optional.of(cu);
     }
 
     // ── Inner records ─────────────────────────────────────────────────────────

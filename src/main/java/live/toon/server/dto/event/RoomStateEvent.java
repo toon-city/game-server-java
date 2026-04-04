@@ -13,7 +13,6 @@ public class RoomStateEvent {
     private String roomId;
     private String name;
     private String houseData;
-    /** userId → { username, avatarOptions, x, y } */
     private List<UserSnapshot> users;
 
     @Data
@@ -21,7 +20,8 @@ public class RoomStateEvent {
     public static class UserSnapshot {
         private String userId;
         private String username;
-        private Object avatarOptions;
+        private int skinColor;
+        private Map<String, String> clothing;
         private double x;
         private double y;
         private int direction;

@@ -49,4 +49,8 @@ public class User {
     /** Last login timestamp — updated on every WebSocket connection. */
     @Column(name = "last_login_at")
     private OffsetDateTime lastLoginAt;
+
+    /** Couleur de peau de l'avatar (valeur hexadécimale, ex: 0xf7ceaf). */
+    @Column(name = "skin_color")
+    private Integer skinColor;
 }

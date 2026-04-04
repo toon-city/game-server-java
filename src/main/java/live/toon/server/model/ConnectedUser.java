@@ -3,6 +3,7 @@ package live.toon.server.model;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.Map;
 import java.util.UUID;
 
 /** Snapshot of a connected user inside a room (in-memory only). */
@@ -15,8 +16,10 @@ public class ConnectedUser {
     private double x;
     private double y;
     private int direction;
-    /** Avatar options serialized as JSON string (forwarded as-is from client join payload). */
-    private String avatarOptionsJson;
+    /** Couleur de peau (ex: 0xf7ceaf). */
+    private int skinColor;
+    /** Vêtements équipés : spriteKey → spritePath (ex: "hair" → "hair7"). */
+    private Map<String, String> clothing;
     /** MALE, FEMALE, NON_BINARY — may be null */
     private String gender;
     /** 0 = user, 1 = moderator, 2 = admin */

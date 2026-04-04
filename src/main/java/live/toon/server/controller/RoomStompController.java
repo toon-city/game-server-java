@@ -41,7 +41,7 @@ public class RoomStompController {
 
         var resultOpt = roomStateService.join(
                 roomId, sessionId, user,
-                payload.getAvatarOptions(), payload.getX(), payload.getY());
+                payload.getDirection(), payload.getX(), payload.getY());
 
         if (resultOpt.isEmpty()) {
             messaging.convertAndSendToUser(
@@ -70,9 +70,13 @@ public class RoomStompController {
                 UserJoinedEvent.builder()
                         .userId(user.getUserId().toString())
                         .username(user.getUsername())
-                        .avatarOptions(payload.getAvatarOptions())
+                        .skinColor(roomStateService.getUser(roomId, user.getUserId().toString())
+                                .map(live.toon.server.model.ConnectedUser::getSkinColor).orElse(0xf7ceaf))
+                        .clothing(roomStateService.getUser(roomId, user.getUserId().toString())
+                                .map(live.toon.server.model.ConnectedUser::getClothing).orElse(java.util.Map.of()))
                         .x(payload.getX())
                         .y(payload.getY())
+                        .direction(payload.getDirection())
                         .gender(user.getGender())
                         .rank(user.getRank())
                         .toonizLevel(user.getToonizLevel())
@@ -201,6 +205,24 @@ public class RoomStompController {
                         .build());
     }
 
+    // ─── /app/avatar/clothing/refresh ────────────────────────────────────────
+
+    @MessageMapping("/avatar/clothing/refresh")
+    public void clothingRefresh(@Payload ClothingRefreshPayload payload, Principal principal) {
+        UserPrincipal user = extractPrincipal(principal);
+        String roomId = payload.roomId();
+        String userId = user.getUserId().toString();
+
+        roomStateService.refreshClothing(roomId, userId).ifPresent(cu ->
+            messaging.convertAndSend(
+                    roomTopic(roomId, "avatar-appearance"),
+                    AvatarAppearanceEvent.builder()
+                            .userId(userId)
+                            .skinColor(cu.getSkinColor())
+                            .clothing(cu.getClothing())
+                            .build()));
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private UserPrincipal extractPrincipal(Principal principal) {
@@ -214,4 +236,5 @@ public class RoomStompController {
 
     record ErrorEvent(String code, String message) {}
     record KickedEvent(String code, String message) {}
+    record ClothingRefreshPayload(String roomId) {}
 }
