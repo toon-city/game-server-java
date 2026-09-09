@@ -92,7 +92,9 @@ public class RoomStompController {
                         .toonizLevel(user.getToonizLevel())
                         .build());
 
-        return roomStateService.buildRoomState(result.room());
+        // Snapshot taken atomically with the join inside the service — not rebuilt
+        // here, where a concurrent joiner could slip in or out of it.
+        return result.roomState();
     }
 
     // ─── /app/leave ──────────────────────────────────────────────────────────

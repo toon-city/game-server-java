@@ -91,7 +91,14 @@ public class RoomStateService {
             RoomMembership oldMembership = sessionIndex.remove(existingSession);
             if (oldMembership != null) {
                 var oldRoomUsers = rooms.get(oldMembership.roomId());
-                if (oldRoomUsers != null) oldRoomUsers.remove(userId);
+                // Locked like every other membership change so it can't land in
+                // the middle of another joiner's snapshot. Released before the
+                // new room is locked below — the two are never held at once.
+                if (oldRoomUsers != null) {
+                    synchronized (oldRoomUsers) {
+                        oldRoomUsers.remove(userId);
+                    }
+                }
                 // Decrement old room and mark offline; new join will set online=true again.
                 persistLeave(oldMembership.roomId(), userId);
                 // Only the old room needs a "left" broadcast if it differs from the one being joined
@@ -115,20 +122,33 @@ public class RoomStateService {
         // ── Charger les vêtements équipés depuis la DB ────────────────────────
         Map<String, String> clothing = buildClothingMap(principal.getUserId());
 
-        rooms.computeIfAbsent(roomId, k -> new ConcurrentHashMap<>())
-                .put(userId, ConnectedUser.builder()
-                        .userId(principal.getUserId())
-                        .username(principal.getUsername())
-                        .sessionId(sessionId)
-                        .skinColor(skinColor)
-                        .clothing(clothing)
-                        .gender(gender)
-                        .rank(rank)
-                        .toonizLevel(toonizLvl)
-                        .x(x)
-                        .y(y)
-                        .direction(direction)
-                        .build());
+        ConcurrentHashMap<String, ConnectedUser> roomUsers =
+                rooms.computeIfAbsent(roomId, k -> new ConcurrentHashMap<>());
+        Room room = roomOpt.get();
+        RoomStateEvent roomState;
+
+        // Register the joiner and snapshot the room under the same lock. When two
+        // players join at the same instant, each one then either sees the other
+        // in its own snapshot, or registered first and is therefore announced to
+        // the other by the "joined" broadcast. Taking the snapshot outside the
+        // lock allowed both snapshots to be built before either insert landed,
+        // leaving two players in the same room invisible to each other.
+        synchronized (roomUsers) {
+            roomUsers.put(userId, ConnectedUser.builder()
+                    .userId(principal.getUserId())
+                    .username(principal.getUsername())
+                    .sessionId(sessionId)
+                    .skinColor(skinColor)
+                    .clothing(clothing)
+                    .gender(gender)
+                    .rank(rank)
+                    .toonizLevel(toonizLvl)
+                    .x(x)
+                    .y(y)
+                    .direction(direction)
+                    .build());
+            roomState = snapshotRoom(room, roomUsers.values());
+        }
 
         sessionIndex.put(sessionId, new RoomMembership(roomId, userId));
         userSessionIndex.put(userId, sessionId);
@@ -141,11 +161,10 @@ public class RoomStateService {
             dbUser.setLastLoginAt(java.time.OffsetDateTime.now());
             userRepository.save(dbUser);
         }
-        Room room = roomOpt.get();
         room.setUserCount(Math.max(0, room.getUserCount() + 1));
         roomRepository.save(room);
 
-        return Optional.of(new JoinResult(room, evictedSessionId, evictedRoomId));
+        return Optional.of(new JoinResult(room, roomState, evictedSessionId, evictedRoomId));
     }
 
     public void updatePosition(String roomId, String userId, double x, double y, int direction) {
@@ -161,7 +180,10 @@ public class RoomStateService {
     public Optional<ConnectedUser> leave(String roomId, String userId) {
         var roomUsers = rooms.get(roomId);
         if (roomUsers == null) return Optional.empty();
-        ConnectedUser user = roomUsers.remove(userId);
+        ConnectedUser user;
+        synchronized (roomUsers) {
+            user = roomUsers.remove(userId);
+        }
         if (user != null) {
             sessionIndex.remove(user.getSessionId());
             userSessionIndex.remove(userId);
@@ -178,7 +200,11 @@ public class RoomStateService {
         RoomMembership membership = sessionIndex.remove(sessionId);
         if (membership == null) return Optional.empty();
         var roomUsers = rooms.get(membership.roomId());
-        if (roomUsers != null) roomUsers.remove(membership.userId());
+        if (roomUsers != null) {
+            synchronized (roomUsers) {
+                roomUsers.remove(membership.userId());
+            }
+        }
         userSessionIndex.remove(membership.userId());
         persistLeave(membership.roomId(), membership.userId());
         return Optional.of(membership);
@@ -234,8 +260,13 @@ public class RoomStateService {
     }
 
     public RoomStateEvent buildRoomState(Room room) {
+        return snapshotRoom(room, getUsers(room.getId().toString()));
+    }
+
+    /** Build the room state from an explicit user list (callers may hold the room lock). */
+    private RoomStateEvent snapshotRoom(Room room, Collection<ConnectedUser> users) {
         String roomId = room.getId().toString();
-        List<RoomStateEvent.UserSnapshot> snapshots = getUsers(roomId).stream()
+        List<RoomStateEvent.UserSnapshot> snapshots = users.stream()
                 .map(u -> RoomStateEvent.UserSnapshot.builder()
                         .userId(u.getUserId().toString())
                         .username(u.getUsername())
@@ -304,10 +335,12 @@ public class RoomStateService {
      * Result of a {@link #join} call.
      *
      * @param room             the room that was joined
+     * @param roomState        snapshot taken atomically with the join, to send back to the joiner
      * @param evictedSessionId STOMP session ID of the previous session that was evicted, or null if none
      * @param evictedRoomId    room the evicted session was in, or null if none/same room as the new join
      */
-    public record JoinResult(Room room, String evictedSessionId, String evictedRoomId) {
+    public record JoinResult(Room room, RoomStateEvent roomState,
+                             String evictedSessionId, String evictedRoomId) {
         public boolean hasEviction() { return evictedSessionId != null; }
     }
 }
