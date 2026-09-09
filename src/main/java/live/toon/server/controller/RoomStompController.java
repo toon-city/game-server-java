@@ -62,6 +62,16 @@ public class RoomStompController {
                     new KickedEvent("DUPLICATE_SESSION",
                             "Vous avez été déconnecté car vous vous êtes connecté ailleurs."));
             log.info("Sent kick to session {} (duplicate session)", result.evictedSessionId());
+
+            // Tell the old room the evicted user is gone, otherwise their avatar stays
+            // frozen on-screen for everyone still in that room.
+            if (result.evictedRoomId() != null) {
+                messaging.convertAndSend(
+                        roomTopic(result.evictedRoomId(), "left"),
+                        UserLeftEvent.builder()
+                                .userId(user.getUserId().toString())
+                                .build());
+            }
         }
 
         // Broadcast to room: user joined
@@ -115,6 +125,18 @@ public class RoomStompController {
                         .x(payload.getX())
                         .y(payload.getY())
                         .direction(payload.getDirection())
+                        .build());
+    }
+
+    // ─── /app/avatar/stop ────────────────────────────────────────────────────
+
+    @MessageMapping("/avatar/stop")
+    public void avatarStop(@Payload AvatarStopPayload payload, Principal principal) {
+        UserPrincipal user = extractPrincipal(principal);
+        messaging.convertAndSend(
+                roomTopic(payload.getRoomId(), "avatar-stop"),
+                AvatarStopEvent.builder()
+                        .userId(user.getUserId().toString())
                         .build());
     }
 

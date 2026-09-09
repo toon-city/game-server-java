@@ -85,6 +85,7 @@ public class RoomStateService {
 
         // ── Evict existing session if the user is already connected ──────────
         String evictedSessionId = null;
+        String evictedRoomId = null;
         String existingSession = userSessionIndex.get(userId);
         if (existingSession != null && !existingSession.equals(sessionId)) {
             RoomMembership oldMembership = sessionIndex.remove(existingSession);
@@ -93,6 +94,11 @@ public class RoomStateService {
                 if (oldRoomUsers != null) oldRoomUsers.remove(userId);
                 // Decrement old room and mark offline; new join will set online=true again.
                 persistLeave(oldMembership.roomId(), userId);
+                // Only the old room needs a "left" broadcast if it differs from the one being joined
+                // (rejoining the same room, e.g. tab refresh, doesn't leave anyone behind to notify).
+                if (!oldMembership.roomId().equals(roomId)) {
+                    evictedRoomId = oldMembership.roomId();
+                }
                 log.info("Evicted existing session {} of user {} from room {}",
                         existingSession, principal.getUsername(), oldMembership.roomId());
             }
@@ -139,7 +145,7 @@ public class RoomStateService {
         room.setUserCount(Math.max(0, room.getUserCount() + 1));
         roomRepository.save(room);
 
-        return Optional.of(new JoinResult(room, evictedSessionId));
+        return Optional.of(new JoinResult(room, evictedSessionId, evictedRoomId));
     }
 
     public void updatePosition(String roomId, String userId, double x, double y, int direction) {
@@ -297,10 +303,11 @@ public class RoomStateService {
     /**
      * Result of a {@link #join} call.
      *
-     * @param room           the room that was joined
-     * @param evictedSessionId  STOMP session ID of the previous session that was evicted, or null if none
+     * @param room             the room that was joined
+     * @param evictedSessionId STOMP session ID of the previous session that was evicted, or null if none
+     * @param evictedRoomId    room the evicted session was in, or null if none/same room as the new join
      */
-    public record JoinResult(Room room, String evictedSessionId) {
+    public record JoinResult(Room room, String evictedSessionId, String evictedRoomId) {
         public boolean hasEviction() { return evictedSessionId != null; }
     }
 }
