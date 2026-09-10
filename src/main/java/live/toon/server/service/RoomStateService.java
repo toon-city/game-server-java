@@ -34,6 +34,12 @@ public class RoomStateService {
     private final UserItemRepository userItemRepository;
     private final FurnitureStateService furnitureStateService;
 
+    /** Mirrors live.toon.api.security.UserRank.ROLE_ADMIN.getLevel() — same constant as FurnitureStateService. */
+    private static final int ADMIN_RANK = 2;
+    /** Mirrors game-types' RoomPermission.OWN / .VIEW ordinals. */
+    private static final int PERMISSION_OWN = 2;
+    private static final int PERMISSION_VIEW = 0;
+
     /**
      * roomId → (userId → ConnectedUser)
      */
@@ -148,7 +154,7 @@ public class RoomStateService {
                     .y(y)
                     .direction(direction)
                     .build());
-            roomState = snapshotRoom(room, roomUsers.values());
+            roomState = snapshotRoom(room, roomUsers.values(), principal.getUserId(), rank);
         }
 
         sessionIndex.put(sessionId, new RoomMembership(roomId, userId));
@@ -260,12 +266,18 @@ public class RoomStateService {
         return Optional.ofNullable(sessionIndex.get(sessionId)).map(RoomMembership::roomId);
     }
 
-    public RoomStateEvent buildRoomState(Room room) {
-        return snapshotRoom(room, getUsers(room.getId().toString()));
+    public RoomStateEvent buildRoomState(Room room, UUID viewerUserId, int viewerRank) {
+        return snapshotRoom(room, getUsers(room.getId().toString()), viewerUserId, viewerRank);
     }
 
-    /** Build the room state from an explicit user list (callers may hold the room lock). */
-    private RoomStateEvent snapshotRoom(Room room, Collection<ConnectedUser> users) {
+    /**
+     * Build the room state from an explicit user list (callers may hold the room lock).
+     * yourPermission is computed for viewerUserId specifically — this event is only
+     * ever sent to that one user (/user/queue/state), never broadcast, so it's safe
+     * for it to carry a per-viewer field.
+     */
+    private RoomStateEvent snapshotRoom(Room room, Collection<ConnectedUser> users,
+                                         UUID viewerUserId, int viewerRank) {
         String roomId = room.getId().toString();
         List<RoomStateEvent.UserSnapshot> snapshots = users.stream()
                 .map(u -> RoomStateEvent.UserSnapshot.builder()
@@ -288,7 +300,19 @@ public class RoomStateService {
                 .houseData(room.getHouseData())
                 .users(snapshots)
                 .furnitures(furnitureStateService.listPlaced(room.getId()))
+                .yourPermission(computePermission(room, viewerUserId, viewerRank))
                 .build();
+    }
+
+    /**
+     * Same rule as FurnitureStateService.assertCanManageRoom(): the room's owner,
+     * or any admin (rank >= ADMIN_RANK — moderators get nothing extra here). No
+     * intermediate co-editor tier exists yet, so this is binary: OWN or VIEW.
+     */
+    private int computePermission(Room room, UUID viewerUserId, int viewerRank) {
+        if (viewerRank >= ADMIN_RANK) return PERMISSION_OWN;
+        if (viewerUserId != null && viewerUserId.equals(room.getOwnerId())) return PERMISSION_OWN;
+        return PERMISSION_VIEW;
     }
 
     // ── Clothing helpers ──────────────────────────────────────────────────────
