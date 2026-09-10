@@ -311,7 +311,20 @@ public class RoomStateService {
      * Re-charge les vêtements équipés depuis la DB pour un utilisateur dans une room
      * et met à jour son ConnectedUser en mémoire.
      * Retourne le ConnectedUser mis à jour, ou empty si l'utilisateur n'est pas dans cette room.
+     *
+     * @Transactional is required here: buildClothingMap() reads UserItem.item, a
+     * LAZY @ManyToOne, and accesses it (getSpriteKey/getSpritePath) inside the
+     * stream — without an open Hibernate session that throws
+     * LazyInitializationException ("no Session") the moment the proxy is
+     * touched. join() calling the same buildClothingMap() never hit this
+     * because join() is itself @Transactional; this STOMP-triggered path
+     * (RoomStompController.clothingRefresh -> refreshClothing) had no
+     * transaction of its own. Confirmed live: equipping an item and
+     * refreshing clothing over a real STOMP connection threw exactly this,
+     * so the broadcast never went out — nobody's avatar-appearance update
+     * ever reached the room.
      */
+    @Transactional(readOnly = true)
     public Optional<ConnectedUser> refreshClothing(String roomId, String userId) {
         var roomUsers = rooms.get(roomId);
         if (roomUsers == null) return Optional.empty();
