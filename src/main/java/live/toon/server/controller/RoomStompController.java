@@ -4,6 +4,8 @@ import live.toon.server.dto.*;
 import live.toon.server.dto.event.*;
 import live.toon.server.model.UserPrincipal;
 import live.toon.server.service.ChatService;
+import live.toon.server.service.FurnitureStateService;
+import live.toon.server.service.RoomModerationService;
 import live.toon.server.service.RoomStateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Controller;
 import java.security.Principal;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 
 @Slf4j
 @Controller
@@ -26,7 +29,8 @@ public class RoomStompController {
 
     private final RoomStateService roomStateService;
     private final ChatService chatService;
-    private final live.toon.server.service.FurnitureStateService furnitureStateService;
+    private final FurnitureStateService furnitureStateService;
+    private final RoomModerationService roomModerationService;
     private final SimpMessagingTemplate messaging;
 
     // ─── /app/join ────────────────────────────────────────────────────────────
@@ -39,6 +43,14 @@ public class RoomStompController {
         String roomId = payload.getRoomId();
         // Use the real STOMP session ID (not principal.getName())
         String sessionId = headerAccessor.getSessionId();
+
+        if (roomModerationService.isRoomBanned(Long.parseLong(roomId), user.getUserId())) {
+            messaging.convertAndSendToUser(
+                    user.getUserId().toString(),
+                    "/queue/error",
+                    new ErrorEvent("ROOM_BANNED", "Vous êtes banni de cette room."));
+            return null;
+        }
 
         var resultOpt = roomStateService.join(
                 roomId, sessionId, user,
@@ -278,6 +290,54 @@ public class RoomStompController {
                 new ErrorEvent("FURNITURE_ACTION_FAILED", e.getMessage()));
     }
 
+    // ─── /app/room/kick, /app/room/ban, /app/chat/private ──────────────────────
+    // Permission (room owner or admin) is re-checked server-side on every call
+    // by RoomModerationService — the client's yourPermission-gated UI is a
+    // convenience, never the actual boundary.
+
+    @MessageMapping("/room/kick")
+    public void roomKick(@Payload RoomKickPayload payload, Principal principal) {
+        UserPrincipal user = extractPrincipal(principal);
+        try {
+            roomModerationService.kick(
+                    user.getUserId(), user.getRank(), Long.parseLong(payload.getRoomId()),
+                    UUID.fromString(payload.getTargetUserId()), null);
+        } catch (IllegalArgumentException e) {
+            sendModerationError(user, e);
+        }
+    }
+
+    @MessageMapping("/room/ban")
+    public void roomBan(@Payload RoomBanPayload payload, Principal principal) {
+        UserPrincipal user = extractPrincipal(principal);
+        try {
+            roomModerationService.banFromRoom(
+                    user.getUserId(), user.getRank(), Long.parseLong(payload.getRoomId()),
+                    UUID.fromString(payload.getTargetUserId()), payload.getReason());
+        } catch (IllegalArgumentException e) {
+            sendModerationError(user, e);
+        }
+    }
+
+    @MessageMapping("/chat/private")
+    public void privateMessage(@Payload PrivateMessagePayload payload, Principal principal) {
+        UserPrincipal user = extractPrincipal(principal);
+        try {
+            roomModerationService.sendPrivateMessage(
+                    user.getUserId(), user.getUsername(), Long.parseLong(payload.getRoomId()),
+                    UUID.fromString(payload.getToUserId()), payload.getText());
+        } catch (IllegalArgumentException e) {
+            sendModerationError(user, e);
+        }
+    }
+
+    private void sendModerationError(UserPrincipal user, IllegalArgumentException e) {
+        messaging.convertAndSendToUser(
+                user.getUserId().toString(),
+                "/queue/error",
+                new ErrorEvent("MODERATION_ACTION_FAILED", e.getMessage()));
+    }
+
     // ─── /app/avatar/clothing/refresh ────────────────────────────────────────
 
     @MessageMapping("/avatar/clothing/refresh")
@@ -307,7 +367,5 @@ public class RoomStompController {
         return "/topic/room/" + roomId + "/" + event;
     }
 
-    record ErrorEvent(String code, String message) {}
-    record KickedEvent(String code, String message) {}
     record ClothingRefreshPayload(String roomId) {}
 }

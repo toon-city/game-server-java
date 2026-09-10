@@ -33,9 +33,8 @@ public class RoomStateService {
     private final UserRepository userRepository;
     private final UserItemRepository userItemRepository;
     private final FurnitureStateService furnitureStateService;
+    private final RoomAccessService roomAccessService;
 
-    /** Mirrors live.toon.api.security.UserRank.ROLE_ADMIN.getLevel() — same constant as FurnitureStateService. */
-    private static final int ADMIN_RANK = 2;
     /** Mirrors game-types' RoomPermission.OWN / .VIEW ordinals. */
     private static final int PERMISSION_OWN = 2;
     private static final int PERMISSION_VIEW = 0;
@@ -266,6 +265,15 @@ public class RoomStateService {
         return Optional.ofNullable(sessionIndex.get(sessionId)).map(RoomMembership::roomId);
     }
 
+    /**
+     * Retourne la session STOMP active d'un utilisateur, peu importe la room —
+     * utilisé pour le kick site-wide (RoomModerationService.kickForSiteBan),
+     * où la cible peut être dans n'importe quelle room ou même dans aucune.
+     */
+    public Optional<String> getSessionIdForUser(String userId) {
+        return Optional.ofNullable(userSessionIndex.get(userId));
+    }
+
     public RoomStateEvent buildRoomState(Room room, UUID viewerUserId, int viewerRank) {
         return snapshotRoom(room, getUsers(room.getId().toString()), viewerUserId, viewerRank);
     }
@@ -305,14 +313,12 @@ public class RoomStateService {
     }
 
     /**
-     * Same rule as FurnitureStateService.assertCanManageRoom(): the room's owner,
-     * or any admin (rank >= ADMIN_RANK — moderators get nothing extra here). No
-     * intermediate co-editor tier exists yet, so this is binary: OWN or VIEW.
+     * Delegates to RoomAccessService.canManageRoom() (the room's owner, or any
+     * admin — moderators get nothing extra here). No intermediate co-editor
+     * tier exists yet, so this is binary: OWN or VIEW.
      */
     private int computePermission(Room room, UUID viewerUserId, int viewerRank) {
-        if (viewerRank >= ADMIN_RANK) return PERMISSION_OWN;
-        if (viewerUserId != null && viewerUserId.equals(room.getOwnerId())) return PERMISSION_OWN;
-        return PERMISSION_VIEW;
+        return roomAccessService.canManageRoom(room, viewerUserId, viewerRank) ? PERMISSION_OWN : PERMISSION_VIEW;
     }
 
     // ── Clothing helpers ──────────────────────────────────────────────────────

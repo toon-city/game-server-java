@@ -41,11 +41,9 @@ public class FurnitureStateService {
     /** Only this ItemSubType can be placed in a room — floors/walls/wallpaper are room *shape*, not instances. */
     private static final String PLACEABLE_SUBTYPE = "PIECE";
 
-    /** Mirrors live.toon.api.security.UserRank.ROLE_ADMIN.getLevel() — kept in sync manually, no shared module. */
-    private static final int ADMIN_RANK = 2;
-
     private final UserItemRepository userItemRepository;
     private final RoomRepository roomRepository;
+    private final RoomAccessService roomAccessService;
 
     @Transactional
     public PlaceResult place(UUID userId, int rank, Long roomId, Long userItemId, double x, double y, int orientation) {
@@ -54,7 +52,7 @@ public class FurnitureStateService {
         // Admins can place furniture owned by anyone (moderation/decoration power);
         // a regular user (who only reaches this point as the room's own owner) may
         // only place items from their own inventory.
-        UserItem ui = (rank >= ADMIN_RANK
+        UserItem ui = (rank >= RoomAccessService.ADMIN_RANK
                 ? userItemRepository.findByIdAndPlacedInRoomIdIsNull(userItemId)
                 : userItemRepository.findByIdAndUserIdAndPlacedInRoomIdIsNull(userItemId, userId))
                 .orElseThrow(() -> new IllegalArgumentException("Objet introuvable ou déjà placé"));
@@ -115,12 +113,9 @@ public class FurnitureStateService {
      * even probe whether a given userItemId is placed in someone else's room.
      */
     private void assertCanManageRoom(UUID userId, int rank, Long roomId) {
-        if (rank >= ADMIN_RANK) {
-            return;
-        }
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new IllegalArgumentException("Room introuvable"));
-        if (room.getOwnerId() == null || !room.getOwnerId().equals(userId)) {
+        if (!roomAccessService.canManageRoom(room, userId, rank)) {
             throw new IllegalArgumentException("Vous ne pouvez gérer les meubles que dans vos propres rooms");
         }
     }
@@ -135,7 +130,7 @@ public class FurnitureStateService {
      * restriction in practice.
      */
     private UserItem placedHere(UUID userId, int rank, Long roomId, Long userItemId) {
-        if (rank >= ADMIN_RANK) {
+        if (rank >= RoomAccessService.ADMIN_RANK) {
             return userItemRepository.findByIdAndPlacedInRoomId(userItemId, roomId)
                     .orElseThrow(() -> new IllegalArgumentException("Objet introuvable dans cette room"));
         }

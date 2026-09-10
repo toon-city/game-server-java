@@ -1,6 +1,8 @@
 package live.toon.server.security;
 
+import live.toon.server.entity.User;
 import live.toon.server.model.UserPrincipal;
+import live.toon.server.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
@@ -12,6 +14,7 @@ import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.stereotype.Component;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 @Slf4j
@@ -20,6 +23,7 @@ import java.util.List;
 public class JwtChannelInterceptor implements ChannelInterceptor {
 
     private final JwtService jwtService;
+    private final UserRepository userRepository;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -47,6 +51,24 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         }
 
         UserPrincipal principal = jwtService.extractPrincipal(token);
+
+        // Deliberate deviation from "no DB round-trip at CONNECT" (see the
+        // rest of this class): a JWT minted before a ban is still perfectly
+        // valid by signature alone, and a site ban is supposed to be a real
+        // wall, not just something that stops new logins. This is the only
+        // place that re-checks live DB state instead of trusting the token.
+        User dbUser = userRepository.findById(principal.getUserId()).orElse(null);
+        if (dbUser != null && dbUser.isBanned()) {
+            OffsetDateTime until = dbUser.getBannedUntil();
+            boolean expired = until != null && until.isBefore(OffsetDateTime.now());
+            if (!expired) {
+                log.warn("STOMP CONNECT rejected: user {} is banned", principal.getUserId());
+                throw new IllegalArgumentException("Compte banni");
+            }
+            // Expired temp ban: game-api's own login flow owns clearing the flag —
+            // this path only decides whether to let the CONNECT through today.
+        }
+
         var auth = new UsernamePasswordAuthenticationToken(principal, null, List.of());
         accessor.setUser(auth);
 
