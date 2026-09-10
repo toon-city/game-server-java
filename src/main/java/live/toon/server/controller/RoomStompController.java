@@ -197,7 +197,7 @@ public class RoomStompController {
         UserPrincipal user = extractPrincipal(principal);
         try {
             var result = furnitureStateService.place(
-                    user.getUserId(), Long.parseLong(payload.getRoomId()),
+                    user.getUserId(), user.getRank(), Long.parseLong(payload.getRoomId()),
                     payload.getUserItemId(), payload.getX(), payload.getY(), payload.getOrientation());
             messaging.convertAndSend(
                     roomTopic(payload.getRoomId(), "furniture-place"),
@@ -222,7 +222,7 @@ public class RoomStompController {
         UserPrincipal user = extractPrincipal(principal);
         try {
             furnitureStateService.move(
-                    user.getUserId(), Long.parseLong(payload.getRoomId()),
+                    user.getUserId(), user.getRank(), Long.parseLong(payload.getRoomId()),
                     Long.parseLong(payload.getInstanceId()), payload.getX(), payload.getY());
             messaging.convertAndSend(
                     roomTopic(payload.getRoomId(), "furniture-move"),
@@ -241,7 +241,7 @@ public class RoomStompController {
         UserPrincipal user = extractPrincipal(principal);
         try {
             furnitureStateService.rotate(
-                    user.getUserId(), Long.parseLong(payload.getRoomId()),
+                    user.getUserId(), user.getRank(), Long.parseLong(payload.getRoomId()),
                     Long.parseLong(payload.getInstanceId()), payload.getOrientation());
             messaging.convertAndSend(
                     roomTopic(payload.getRoomId(), "furniture-rotate"),
@@ -259,7 +259,7 @@ public class RoomStompController {
         UserPrincipal user = extractPrincipal(principal);
         try {
             furnitureStateService.remove(
-                    user.getUserId(), Long.parseLong(payload.getRoomId()),
+                    user.getUserId(), user.getRank(), Long.parseLong(payload.getRoomId()),
                     Long.parseLong(payload.getInstanceId()));
             messaging.convertAndSend(
                     roomTopic(payload.getRoomId(), "furniture-remove"),

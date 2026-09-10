@@ -2,7 +2,9 @@ package live.toon.server.service;
 
 import live.toon.server.dto.event.RoomStateEvent.FurnitureSnapshot;
 import live.toon.server.entity.Item;
+import live.toon.server.entity.Room;
 import live.toon.server.entity.UserItem;
+import live.toon.server.repository.RoomRepository;
 import live.toon.server.repository.UserItemRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,13 @@ import java.util.stream.Collectors;
  * needs it: UserItem.item is a LAZY @ManyToOne, and every method here reads it
  * (subType/spriteKey/spritePath) — without an open Hibernate session that
  * throws LazyInitializationException the moment the proxy is touched.
+ *
+ * Permissions: a regular user may only place/move/rotate/remove furniture in a
+ * room they own (rooms.owner_id), and only ever items from their own inventory.
+ * Moderators get no special treatment here — only admins (rank >= ROLE_ADMIN)
+ * bypass both checks entirely: they can place any unplaced item (owned by
+ * anyone) into any room, and move/rotate/remove any piece already placed in
+ * any room, regardless of who placed it.
  */
 @Service
 @RequiredArgsConstructor
@@ -32,11 +41,22 @@ public class FurnitureStateService {
     /** Only this ItemSubType can be placed in a room — floors/walls/wallpaper are room *shape*, not instances. */
     private static final String PLACEABLE_SUBTYPE = "PIECE";
 
+    /** Mirrors live.toon.api.security.UserRank.ROLE_ADMIN.getLevel() — kept in sync manually, no shared module. */
+    private static final int ADMIN_RANK = 2;
+
     private final UserItemRepository userItemRepository;
+    private final RoomRepository roomRepository;
 
     @Transactional
-    public PlaceResult place(UUID userId, Long roomId, Long userItemId, double x, double y, int orientation) {
-        UserItem ui = userItemRepository.findByIdAndUserIdAndPlacedInRoomIdIsNull(userItemId, userId)
+    public PlaceResult place(UUID userId, int rank, Long roomId, Long userItemId, double x, double y, int orientation) {
+        assertCanManageRoom(userId, rank, roomId);
+
+        // Admins can place furniture owned by anyone (moderation/decoration power);
+        // a regular user (who only reaches this point as the room's own owner) may
+        // only place items from their own inventory.
+        UserItem ui = (rank >= ADMIN_RANK
+                ? userItemRepository.findByIdAndPlacedInRoomIdIsNull(userItemId)
+                : userItemRepository.findByIdAndUserIdAndPlacedInRoomIdIsNull(userItemId, userId))
                 .orElseThrow(() -> new IllegalArgumentException("Objet introuvable ou déjà placé"));
 
         Item item = ui.getItem();
@@ -54,23 +74,26 @@ public class FurnitureStateService {
     }
 
     @Transactional
-    public void move(UUID userId, Long roomId, Long userItemId, double x, double y) {
-        UserItem ui = ownedAndPlacedHere(userId, roomId, userItemId);
+    public void move(UUID userId, int rank, Long roomId, Long userItemId, double x, double y) {
+        assertCanManageRoom(userId, rank, roomId);
+        UserItem ui = placedHere(userId, rank, roomId, userItemId);
         ui.setX(x);
         ui.setY(y);
         userItemRepository.save(ui);
     }
 
     @Transactional
-    public void rotate(UUID userId, Long roomId, Long userItemId, int orientation) {
-        UserItem ui = ownedAndPlacedHere(userId, roomId, userItemId);
+    public void rotate(UUID userId, int rank, Long roomId, Long userItemId, int orientation) {
+        assertCanManageRoom(userId, rank, roomId);
+        UserItem ui = placedHere(userId, rank, roomId, userItemId);
         ui.setOrientation(orientation);
         userItemRepository.save(ui);
     }
 
     @Transactional
-    public void remove(UUID userId, Long roomId, Long userItemId) {
-        UserItem ui = ownedAndPlacedHere(userId, roomId, userItemId);
+    public void remove(UUID userId, int rank, Long roomId, Long userItemId) {
+        assertCanManageRoom(userId, rank, roomId);
+        UserItem ui = placedHere(userId, rank, roomId, userItemId);
         ui.setPlacedInRoomId(null);
         ui.setX(null);
         ui.setY(null);
@@ -86,8 +109,36 @@ public class FurnitureStateService {
                 .collect(Collectors.toList());
     }
 
-    /** Owner-only: move/rotate/remove all require the caller to both own the row AND have it placed in THIS room. */
-    private UserItem ownedAndPlacedHere(UUID userId, Long roomId, Long userItemId) {
+    /**
+     * Room-level gate: only the room's owner or an admin may touch furniture here at
+     * all. Checked up front on every action (place included) so a non-owner can't
+     * even probe whether a given userItemId is placed in someone else's room.
+     */
+    private void assertCanManageRoom(UUID userId, int rank, Long roomId) {
+        if (rank >= ADMIN_RANK) {
+            return;
+        }
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new IllegalArgumentException("Room introuvable"));
+        if (room.getOwnerId() == null || !room.getOwnerId().equals(userId)) {
+            throw new IllegalArgumentException("Vous ne pouvez gérer les meubles que dans vos propres rooms");
+        }
+    }
+
+    /**
+     * Move/rotate/remove target lookup. Room permission is already asserted by
+     * assertCanManageRoom before this runs, so for an admin any piece placed in the
+     * room qualifies (even one placed by another user); for a regular user (who can
+     * only reach this point as the room's owner) we additionally require they own
+     * the row, since under this permission model everything placed in their own
+     * room was placed by them anyway — this is just defense-in-depth, not an extra
+     * restriction in practice.
+     */
+    private UserItem placedHere(UUID userId, int rank, Long roomId, Long userItemId) {
+        if (rank >= ADMIN_RANK) {
+            return userItemRepository.findByIdAndPlacedInRoomId(userItemId, roomId)
+                    .orElseThrow(() -> new IllegalArgumentException("Objet introuvable dans cette room"));
+        }
         return userItemRepository.findByIdAndUserIdAndPlacedInRoomId(userItemId, userId, roomId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Objet introuvable, pas à vous, ou pas placé dans cette room"));

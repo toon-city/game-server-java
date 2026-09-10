@@ -15,9 +15,15 @@ public interface UserItemRepository extends JpaRepository<UserItem, Long> {
     /** Possédé par cet utilisateur et pas déjà placé quelque part — condition pour un placement. */
     Optional<UserItem> findByIdAndUserIdAndPlacedInRoomIdIsNull(Long id, UUID userId);
 
+    /** Admin-only lookup: no owner check, used to place furniture owned by anyone. */
+    Optional<UserItem> findByIdAndPlacedInRoomIdIsNull(Long id);
+
     /** Possédé par cet utilisateur ET placé dans cette room précise — condition pour move/rotate/remove. */
     Optional<UserItem> findByIdAndUserIdAndPlacedInRoomId(Long id, UUID userId, Long placedInRoomId);
 
     /** Tout ce qui est actuellement placé dans une room, pour l'état envoyé au join. */
     List<UserItem> findByPlacedInRoomId(Long placedInRoomId);
+
+    /** Admin-only lookup: no owner check, used to manage furniture placed by anyone. */
+    Optional<UserItem> findByIdAndPlacedInRoomId(Long id, Long placedInRoomId);
 }
