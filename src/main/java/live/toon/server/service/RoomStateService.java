@@ -32,6 +32,7 @@ public class RoomStateService {
     private final RoomRepository roomRepository;
     private final UserRepository userRepository;
     private final UserItemRepository userItemRepository;
+    private final FurnitureStateService furnitureStateService;
 
     /**
      * roomId → (userId → ConnectedUser)
@@ -286,6 +287,7 @@ public class RoomStateService {
                 .name(room.getName())
                 .houseData(room.getHouseData())
                 .users(snapshots)
+                .furnitures(furnitureStateService.listPlaced(room.getId()))
                 .build();
     }
 

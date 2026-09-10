@@ -26,6 +26,7 @@ public class RoomStompController {
 
     private final RoomStateService roomStateService;
     private final ChatService chatService;
+    private final live.toon.server.service.FurnitureStateService furnitureStateService;
     private final SimpMessagingTemplate messaging;
 
     // ─── /app/join ────────────────────────────────────────────────────────────
@@ -182,51 +183,99 @@ public class RoomStompController {
     }
 
     // ─── /app/furniture/* ────────────────────────────────────────────────────
+    // All four persist via FurnitureStateService before broadcasting — placing/
+    // moving/rotating/removing used to be pure broadcasts with no persistence
+    // at all (a random UUID minted fresh per place() call, never stored), so
+    // furniture placed by one player was invisible to anyone who joined the
+    // room afterward, and vanished the moment the room emptied out. Broadcast
+    // now only happens on success; a rejected action (not owned, already
+    // placed elsewhere, wrong subtype, not placed here) gets a /queue/error
+    // reply instead, same pattern as /app/join's NOT_FOUND case below.
 
     @MessageMapping("/furniture/place")
     public void furniturePlace(@Payload FurniturePlacePayload payload, Principal principal) {
         UserPrincipal user = extractPrincipal(principal);
-        String instanceId = java.util.UUID.randomUUID().toString();
-        messaging.convertAndSend(
-                roomTopic(payload.getRoomId(), "furniture-place"),
-                FurniturePlaceEvent.builder()
-                        .instanceId(instanceId)
-                        .baseId(payload.getBaseId())
-                        .x(payload.getX())
-                        .y(payload.getY())
-                        .orientation(payload.getOrientation())
-                        .placedByUserId(user.getUserId().toString())
-                        .build());
+        try {
+            var result = furnitureStateService.place(
+                    user.getUserId(), Long.parseLong(payload.getRoomId()),
+                    payload.getUserItemId(), payload.getX(), payload.getY(), payload.getOrientation());
+            messaging.convertAndSend(
+                    roomTopic(payload.getRoomId(), "furniture-place"),
+                    FurniturePlaceEvent.builder()
+                            .instanceId(result.instanceId())
+                            .baseId(result.baseId())
+                            .spriteKey(result.spriteKey())
+                            .spritePath(result.spritePath())
+                            .subType(result.subType())
+                            .x(payload.getX())
+                            .y(payload.getY())
+                            .orientation(payload.getOrientation())
+                            .placedByUserId(user.getUserId().toString())
+                            .build());
+        } catch (IllegalArgumentException e) {
+            sendFurnitureError(user, e);
+        }
     }
 
     @MessageMapping("/furniture/move")
     public void furnitureMove(@Payload FurnitureMovePayload payload, Principal principal) {
-        messaging.convertAndSend(
-                roomTopic(payload.getRoomId(), "furniture-move"),
-                FurnitureMoveEvent.builder()
-                        .instanceId(payload.getInstanceId())
-                        .x(payload.getX())
-                        .y(payload.getY())
-                        .build());
+        UserPrincipal user = extractPrincipal(principal);
+        try {
+            furnitureStateService.move(
+                    user.getUserId(), Long.parseLong(payload.getRoomId()),
+                    Long.parseLong(payload.getInstanceId()), payload.getX(), payload.getY());
+            messaging.convertAndSend(
+                    roomTopic(payload.getRoomId(), "furniture-move"),
+                    FurnitureMoveEvent.builder()
+                            .instanceId(payload.getInstanceId())
+                            .x(payload.getX())
+                            .y(payload.getY())
+                            .build());
+        } catch (IllegalArgumentException e) {
+            sendFurnitureError(user, e);
+        }
     }
 
     @MessageMapping("/furniture/rotate")
     public void furnitureRotate(@Payload FurnitureRotatePayload payload, Principal principal) {
-        messaging.convertAndSend(
-                roomTopic(payload.getRoomId(), "furniture-rotate"),
-                FurnitureRotateEvent.builder()
-                        .instanceId(payload.getInstanceId())
-                        .orientation(payload.getOrientation())
-                        .build());
+        UserPrincipal user = extractPrincipal(principal);
+        try {
+            furnitureStateService.rotate(
+                    user.getUserId(), Long.parseLong(payload.getRoomId()),
+                    Long.parseLong(payload.getInstanceId()), payload.getOrientation());
+            messaging.convertAndSend(
+                    roomTopic(payload.getRoomId(), "furniture-rotate"),
+                    FurnitureRotateEvent.builder()
+                            .instanceId(payload.getInstanceId())
+                            .orientation(payload.getOrientation())
+                            .build());
+        } catch (IllegalArgumentException e) {
+            sendFurnitureError(user, e);
+        }
     }
 
     @MessageMapping("/furniture/remove")
     public void furnitureRemove(@Payload FurnitureRemovePayload payload, Principal principal) {
-        messaging.convertAndSend(
-                roomTopic(payload.getRoomId(), "furniture-remove"),
-                FurnitureRemoveEvent.builder()
-                        .instanceId(payload.getInstanceId())
-                        .build());
+        UserPrincipal user = extractPrincipal(principal);
+        try {
+            furnitureStateService.remove(
+                    user.getUserId(), Long.parseLong(payload.getRoomId()),
+                    Long.parseLong(payload.getInstanceId()));
+            messaging.convertAndSend(
+                    roomTopic(payload.getRoomId(), "furniture-remove"),
+                    FurnitureRemoveEvent.builder()
+                            .instanceId(payload.getInstanceId())
+                            .build());
+        } catch (IllegalArgumentException e) {
+            sendFurnitureError(user, e);
+        }
+    }
+
+    private void sendFurnitureError(UserPrincipal user, IllegalArgumentException e) {
+        messaging.convertAndSendToUser(
+                user.getUserId().toString(),
+                "/queue/error",
+                new ErrorEvent("FURNITURE_ACTION_FAILED", e.getMessage()));
     }
 
     // ─── /app/avatar/clothing/refresh ────────────────────────────────────────

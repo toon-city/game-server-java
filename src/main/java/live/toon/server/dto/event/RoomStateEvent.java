@@ -14,6 +14,7 @@ public class RoomStateEvent {
     private String name;
     private String houseData;
     private List<UserSnapshot> users;
+    private List<FurnitureSnapshot> furnitures;
 
     @Data
     @Builder
@@ -28,5 +29,20 @@ public class RoomStateEvent {
         private String gender;
         private int rank;
         private int toonizLevel;
+    }
+
+    /** One piece of furniture currently placed in the room — see FurnitureStateService.listPlaced(). */
+    @Data
+    @Builder
+    public static class FurnitureSnapshot {
+        private String instanceId;
+        private long baseId;
+        private String spriteKey;
+        private String spritePath;
+        private String subType;
+        private double x;
+        private double y;
+        private int orientation;
+        private String placedByUserId;
     }
 }
