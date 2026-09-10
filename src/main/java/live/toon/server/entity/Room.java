@@ -5,6 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "rooms")
@@ -24,6 +25,10 @@ public class Room {
 
     @Column(name = "house_data", columnDefinition = "TEXT")
     private String houseData;
+
+    /** Raw FK, not a @ManyToOne — same pattern as UserItem.userId, we only ever need the id for comparison. */
+    @Column(name = "owner_id")
+    private UUID ownerId;
 
     @Builder.Default
     @Column(name = "max_users", nullable = false)

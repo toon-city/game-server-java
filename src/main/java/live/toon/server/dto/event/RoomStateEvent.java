@@ -14,6 +14,17 @@ public class RoomStateEvent {
     private String name;
     private String houseData;
     private List<UserSnapshot> users;
+    private List<FurnitureSnapshot> furnitures;
+
+    /**
+     * The joining user's own permission level in this room — never broadcast,
+     * only ever sent to that user via /user/queue/state, so it's safe (and
+     * necessary) for this to differ per viewer. Mirrors game-types'
+     * RoomPermission ordinals: VIEW=0, EDIT=1, OWN=2. Only OWN is produced
+     * today (room owner, or any admin — see RoomStateService.computePermission),
+     * there's no intermediate co-editor tier yet.
+     */
+    private int yourPermission;
 
     @Data
     @Builder
@@ -28,5 +39,20 @@ public class RoomStateEvent {
         private String gender;
         private int rank;
         private int toonizLevel;
+    }
+
+    /** One piece of furniture currently placed in the room — see FurnitureStateService.listPlaced(). */
+    @Data
+    @Builder
+    public static class FurnitureSnapshot {
+        private String instanceId;
+        private long baseId;
+        private String spriteKey;
+        private String spritePath;
+        private String subType;
+        private double x;
+        private double y;
+        private int orientation;
+        private String placedByUserId;
     }
 }

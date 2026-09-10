@@ -53,4 +53,11 @@ public class User {
     /** Couleur de peau de l'avatar (valeur hexadécimale, ex: 0xf7ceaf). */
     @Column(name = "skin_color")
     private Integer skinColor;
+
+    /** Mirrors game-api's ban flag — read-only here, used to reject STOMP CONNECT. */
+    @Column(nullable = false)
+    private boolean banned = false;
+
+    @Column(name = "banned_until")
+    private OffsetDateTime bannedUntil;
 }

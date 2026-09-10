@@ -31,3 +31,7 @@ app:
 
 cors:
   allowed-origins: ${CORS_ORIGINS:http://localhost:4200}
+
+# Guards /internal/** — must match game-api's game-server.internal-secret.
+internal:
+  secret: ${INTERNAL_SECRET:changeme-internal-secret-32-chars!!}
