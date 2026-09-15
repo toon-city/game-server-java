@@ -219,6 +219,8 @@ public class RoomStompController {
                     FurniturePlaceEvent.builder()
                             .instanceId(result.instanceId())
                             .baseId(result.baseId())
+                            .name(result.name())
+                            .displayImage(result.displayImage())
                             .spriteKey(result.spriteKey())
                             .spritePath(result.spritePath())
                             .subType(result.subType())

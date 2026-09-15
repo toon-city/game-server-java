@@ -47,6 +47,8 @@ public class RoomStateEvent {
     public static class FurnitureSnapshot {
         private String instanceId;
         private long baseId;
+        private String name;
+        private String displayImage;
         private String spriteKey;
         private String spritePath;
         private String subType;

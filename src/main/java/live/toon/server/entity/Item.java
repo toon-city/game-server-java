@@ -16,6 +16,9 @@ public class Item {
     @Id
     private Long id;
 
+    @Column(nullable = false, length = 64)
+    private String name;
+
     @Column(name = "item_type", nullable = false, length = 20)
     private String itemType;
 
@@ -36,4 +39,8 @@ public class Item {
     /** Identifiant du sprite (ex: "hair7", "banc"). Utilisé pour charger l'asset côté client. */
     @Column(name = "sprite_path", length = 255)
     private String spritePath;
+
+    /** Chemin relatif/URL vers l'image d'affichage — utilisé par l'aperçu de meuble (clic hors édition). */
+    @Column(name = "display_image", length = 255)
+    private String displayImage;
 }

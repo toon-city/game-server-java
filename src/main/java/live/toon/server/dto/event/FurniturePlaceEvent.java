@@ -8,6 +8,8 @@ import lombok.Data;
 public class FurniturePlaceEvent {
     private String instanceId;
     private long baseId;
+    private String name;
+    private String displayImage;
     private String spriteKey;
     private String spritePath;
     private String subType;

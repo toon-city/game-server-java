@@ -144,6 +144,8 @@ public class FurnitureStateService {
         return new PlaceResult(
                 ui.getId().toString(),
                 item.getId(),
+                item.getName(),
+                item.getDisplayImage(),
                 item.getSpriteKey(),
                 item.getSpritePath(),
                 item.getSubType());
@@ -154,6 +156,8 @@ public class FurnitureStateService {
         return FurnitureSnapshot.builder()
                 .instanceId(ui.getId().toString())
                 .baseId(item.getId())
+                .name(item.getName())
+                .displayImage(item.getDisplayImage())
                 .spriteKey(item.getSpriteKey())
                 .spritePath(item.getSpritePath())
                 .subType(item.getSubType())
@@ -164,6 +168,9 @@ public class FurnitureStateService {
                 .build();
     }
 
-    /** Result of a successful place() — everything RoomStompController needs to broadcast. */
-    public record PlaceResult(String instanceId, long baseId, String spriteKey, String spritePath, String subType) {}
+    /** Result of a successful place() — everything RoomStompController needs to broadcast.
+     *  name/displayImage let the client show a preview (click outside edit mode) without a
+     *  separate item lookup — see FurniturePreviewService/'furniture:click' in game-web. */
+    public record PlaceResult(String instanceId, long baseId, String name, String displayImage,
+                               String spriteKey, String spritePath, String subType) {}
 }
