@@ -44,11 +44,14 @@ public class RoomStompController {
         // Use the real STOMP session ID (not principal.getName())
         String sessionId = headerAccessor.getSessionId();
 
-        if (roomModerationService.isRoomBanned(Long.parseLong(roomId), user.getUserId())) {
+        // Covers both a per-room ban AND the room owner having this user on
+        // their personal blacklist (blocks every house that owner has, not
+        // just this one room) — see RoomModerationService.isBlockedFromRoom.
+        if (roomModerationService.isBlockedFromRoom(Long.parseLong(roomId), user.getUserId())) {
             messaging.convertAndSendToUser(
                     user.getUserId().toString(),
                     "/queue/error",
-                    new ErrorEvent("ROOM_BANNED", "Vous êtes banni de cette room."));
+                    new ErrorEvent("ROOM_BANNED", "Vous n'êtes pas autorisé(e) à entrer ici."));
             return null;
         }
 

@@ -6,10 +6,12 @@ import live.toon.server.dto.event.UserLeftEvent;
 import live.toon.server.entity.PrivateMessage;
 import live.toon.server.entity.Room;
 import live.toon.server.entity.RoomBan;
+import live.toon.server.entity.UserBlock;
 import live.toon.server.model.ConnectedUser;
 import live.toon.server.repository.PrivateMessageRepository;
 import live.toon.server.repository.RoomBanRepository;
 import live.toon.server.repository.RoomRepository;
+import live.toon.server.repository.UserBlockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -33,6 +35,7 @@ public class RoomModerationService {
 
     private final RoomRepository roomRepository;
     private final RoomBanRepository roomBanRepository;
+    private final UserBlockRepository userBlockRepository;
     private final PrivateMessageRepository privateMessageRepository;
     private final RoomAccessService roomAccessService;
     private final RoomStateService roomStateService;
@@ -47,7 +50,7 @@ public class RoomModerationService {
 
     @Transactional
     public void banFromRoom(UUID actorId, int actorRank, Long roomId, UUID targetUserId, String reason) {
-        assertCanManageRoom(actorId, actorRank, roomId);
+        Room room = assertCanManageRoom(actorId, actorRank, roomId);
 
         RoomBan ban = roomBanRepository.findByRoomIdAndUserId(roomId, targetUserId)
                 .orElseGet(RoomBan::new);
@@ -57,6 +60,21 @@ public class RoomModerationService {
         ban.setReason(reason);
         roomBanRepository.save(ban);
 
+        // Banning as the room's OWNER also blacklists the target (same table
+        // game-api's /api/friends/blocks writes to) — bars them from every
+        // house this owner has (see RoomStompController.join's block check),
+        // blocks their private messages (sendPrivateMessage below), and hides
+        // their public chat from the owner in any room (game-web's
+        // ChatComponent filters client-side). An admin moderating a room they
+        // don't own doesn't trigger this — that's not a personal block.
+        if (actorId.equals(room.getOwnerId())
+                && !userBlockRepository.existsByBlockerIdAndBlockedId(actorId, targetUserId)) {
+            userBlockRepository.save(UserBlock.builder()
+                    .blockerId(actorId)
+                    .blockedId(targetUserId)
+                    .build());
+        }
+
         doKick(roomId, targetUserId, "ROOM_BANNED",
                 reason != null ? "Vous avez été banni de cette room : " + reason : "Vous avez été banni de cette room.");
     }
@@ -65,8 +83,21 @@ public class RoomModerationService {
         return roomBanRepository.existsByRoomIdAndUserId(roomId, userId);
     }
 
+    /** Per-room ban OR the room's owner has this user on their personal blacklist — see banFromRoom's doc comment. */
+    public boolean isBlockedFromRoom(Long roomId, UUID userId) {
+        if (isRoomBanned(roomId, userId)) return true;
+        return roomRepository.findById(roomId)
+                .map(Room::getOwnerId)
+                .filter(ownerId -> userBlockRepository.existsByBlockerIdAndBlockedId(ownerId, userId))
+                .isPresent();
+    }
+
     @Transactional
     public void sendPrivateMessage(UUID fromUserId, String fromUsername, Long roomId, UUID toUserId, String text) {
+        if (userBlockRepository.existsBetweenEitherDirection(fromUserId, toUserId)) {
+            throw new IllegalArgumentException("Vous ne pouvez pas contacter ce toon.");
+        }
+
         // Presence-only check — recipient must currently be in the same room (no offline delivery, see plan).
         roomStateService.getUser(roomId.toString(), toUserId.toString())
                 .orElseThrow(() -> new IllegalArgumentException("Ce joueur n'est plus dans cette room"));
@@ -113,12 +144,13 @@ public class RoomModerationService {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private void assertCanManageRoom(UUID actorId, int actorRank, Long roomId) {
+    private Room assertCanManageRoom(UUID actorId, int actorRank, Long roomId) {
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new IllegalArgumentException("Room introuvable"));
         if (!roomAccessService.canManageRoom(room, actorId, actorRank)) {
             throw new IllegalArgumentException("Vous ne pouvez modérer que vos propres rooms");
         }
+        return room;
     }
 
     /** Actually removes the target from the room's live state and notifies both them and the room. */
