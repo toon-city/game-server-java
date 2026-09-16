@@ -44,4 +44,15 @@ public class UserItem {
 
     @org.hibernate.annotations.JdbcTypeCode(java.sql.Types.SMALLINT)
     private Integer orientation;
+
+    /** "WALL" or "FLOOR" — set together with zoneIndex when this instance is a
+     *  wallpaper/floor texture applied to one of the room's own zones instead
+     *  of an x/y placement. See TextureStateService. */
+    @Column(name = "zone_type")
+    private String zoneType;
+
+    /** Index into house_data's walls[]/floors[] array (matching zoneType) that
+     *  this texture currently covers. */
+    @Column(name = "zone_index")
+    private Integer zoneIndex;
 }

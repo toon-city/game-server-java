@@ -102,7 +102,10 @@ public class FurnitureStateService {
     /** Everything currently placed in a room — used to build the join snapshot's furniture list. */
     @Transactional(readOnly = true)
     public List<FurnitureSnapshot> listPlaced(Long roomId) {
-        return userItemRepository.findByPlacedInRoomId(roomId).stream()
+        // Excludes zone textures (wallpaper/floor) placed in the same room —
+        // those have no x/y/orientation and get their own TextureSnapshot list
+        // (see TextureStateService.listApplied).
+        return userItemRepository.findByPlacedInRoomIdAndZoneTypeIsNull(roomId).stream()
                 .map(this::toSnapshot)
                 .collect(Collectors.toList());
     }

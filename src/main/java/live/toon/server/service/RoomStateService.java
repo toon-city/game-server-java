@@ -37,6 +37,7 @@ public class RoomStateService {
     private final UserRepository userRepository;
     private final UserItemRepository userItemRepository;
     private final FurnitureStateService furnitureStateService;
+    private final TextureStateService textureStateService;
     private final RoomAccessService roomAccessService;
     private final ObjectMapper objectMapper;
 
@@ -324,6 +325,7 @@ public class RoomStateService {
                 .houseData(room.getHouseData())
                 .users(snapshots)
                 .furnitures(furnitureStateService.listPlaced(room.getId()))
+                .textures(textureStateService.listApplied(room.getId()))
                 .yourPermission(computePermission(room, viewerUserId, viewerRank))
                 .build();
     }

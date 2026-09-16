@@ -15,6 +15,7 @@ public class RoomStateEvent {
     private String houseData;
     private List<UserSnapshot> users;
     private List<FurnitureSnapshot> furnitures;
+    private List<TextureSnapshot> textures;
 
     /**
      * The joining user's own permission level in this room — never broadcast,
@@ -56,5 +57,20 @@ public class RoomStateEvent {
         private double y;
         private int orientation;
         private String placedByUserId;
+    }
+
+    /** One texture currently applied to a room zone (wall or floor) — see TextureStateService.listApplied(). */
+    @Data
+    @Builder
+    public static class TextureSnapshot {
+        private String instanceId;
+        private long baseId;
+        private String name;
+        private String displayImage;
+        private String spriteKey;
+        private String spritePath;
+        private String zoneType;
+        private int zoneIndex;
+        private String appliedByUserId;
     }
 }

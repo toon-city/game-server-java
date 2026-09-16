@@ -7,6 +7,7 @@ import live.toon.server.service.ChatService;
 import live.toon.server.service.FurnitureStateService;
 import live.toon.server.service.RoomModerationService;
 import live.toon.server.service.RoomStateService;
+import live.toon.server.service.TextureStateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -30,6 +31,7 @@ public class RoomStompController {
     private final RoomStateService roomStateService;
     private final ChatService chatService;
     private final FurnitureStateService furnitureStateService;
+    private final TextureStateService textureStateService;
     private final RoomModerationService roomModerationService;
     private final SimpMessagingTemplate messaging;
 
@@ -299,6 +301,59 @@ public class RoomStompController {
                 user.getUserId().toString(),
                 "/queue/error",
                 new ErrorEvent("FURNITURE_ACTION_FAILED", e.getMessage()));
+    }
+
+    // ─── /app/texture/apply, /app/texture/remove ────────────────────────────────
+    // Same success-only-broadcast pattern as furniture above.
+
+    @MessageMapping("/texture/apply")
+    public void textureApply(@Payload TextureApplyPayload payload, Principal principal) {
+        UserPrincipal user = extractPrincipal(principal);
+        try {
+            var result = textureStateService.apply(
+                    user.getUserId(), user.getRank(), Long.parseLong(payload.getRoomId()),
+                    payload.getUserItemId(), payload.getZoneType(), payload.getZoneIndex());
+            messaging.convertAndSend(
+                    roomTopic(payload.getRoomId(), "texture-apply"),
+                    TextureApplyEvent.builder()
+                            .instanceId(result.instanceId())
+                            .baseId(result.baseId())
+                            .name(result.name())
+                            .displayImage(result.displayImage())
+                            .spriteKey(result.spriteKey())
+                            .spritePath(result.spritePath())
+                            .zoneType(result.zoneType())
+                            .zoneIndex(result.zoneIndex())
+                            .appliedByUserId(user.getUserId().toString())
+                            .build());
+        } catch (IllegalArgumentException e) {
+            sendTextureError(user, e);
+        }
+    }
+
+    @MessageMapping("/texture/remove")
+    public void textureRemove(@Payload TextureRemovePayload payload, Principal principal) {
+        UserPrincipal user = extractPrincipal(principal);
+        try {
+            textureStateService.remove(
+                    user.getUserId(), user.getRank(), Long.parseLong(payload.getRoomId()),
+                    payload.getZoneType(), payload.getZoneIndex());
+            messaging.convertAndSend(
+                    roomTopic(payload.getRoomId(), "texture-remove"),
+                    TextureRemoveEvent.builder()
+                            .zoneType(payload.getZoneType())
+                            .zoneIndex(payload.getZoneIndex())
+                            .build());
+        } catch (IllegalArgumentException e) {
+            sendTextureError(user, e);
+        }
+    }
+
+    private void sendTextureError(UserPrincipal user, IllegalArgumentException e) {
+        messaging.convertAndSendToUser(
+                user.getUserId().toString(),
+                "/queue/error",
+                new ErrorEvent("TEXTURE_ACTION_FAILED", e.getMessage()));
     }
 
     // ─── /app/room/kick, /app/room/ban, /app/chat/private ──────────────────────

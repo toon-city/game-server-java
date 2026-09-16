@@ -26,4 +26,21 @@ public interface UserItemRepository extends JpaRepository<UserItem, Long> {
 
     /** Admin-only lookup: no owner check, used to manage furniture placed by anyone. */
     Optional<UserItem> findByIdAndPlacedInRoomId(Long id, Long placedInRoomId);
+
+    /** Meubles (x/y) placés dans une room — exclut les textures de zone (murs/sols),
+     *  qui n'ont pas de x/y et casseraient FurnitureStateService.toSnapshot. */
+    List<UserItem> findByPlacedInRoomIdAndZoneTypeIsNull(Long placedInRoomId);
+
+    /** Textures de zone (murs/sols) actuellement appliquées dans une room. */
+    List<UserItem> findByPlacedInRoomIdAndZoneTypeIsNotNull(Long placedInRoomId);
+
+    /** Possédé par cet utilisateur, pas placé, et pas équipé — condition pour appliquer une texture. */
+    Optional<UserItem> findByIdAndUserIdAndPlacedInRoomIdIsNullAndEquippedFalse(Long id, UUID userId);
+
+    /** Admin-only : idem sans le contrôle de propriétaire. */
+    Optional<UserItem> findByIdAndPlacedInRoomIdIsNullAndEquippedFalse(Long id);
+
+    /** Texture actuellement appliquée à cette zone précise, si elle existe (pour le "swap"
+     *  atomique appliquer-par-dessus-l'existant, et pour retirer via zone plutôt que par id). */
+    Optional<UserItem> findByPlacedInRoomIdAndZoneTypeAndZoneIndex(Long placedInRoomId, String zoneType, Integer zoneIndex);
 }
