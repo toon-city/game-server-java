@@ -60,4 +60,12 @@ public class User {
 
     @Column(name = "banned_until")
     private OffsetDateTime bannedUntil;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "metier_id")
+    private Metier metier;
+
+    /** Overlay flag — see RoomStateService.buildClothingMap(). */
+    @Column(name = "work_outfit_active", nullable = false)
+    private boolean workOutfitActive = false;
 }

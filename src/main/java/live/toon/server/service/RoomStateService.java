@@ -1,6 +1,8 @@
 package live.toon.server.service;
 
 import live.toon.server.dto.event.RoomStateEvent;
+import live.toon.server.entity.Item;
+import live.toon.server.entity.Metier;
 import live.toon.server.entity.Room;
 import live.toon.server.entity.User;
 import live.toon.server.entity.UserItem;
@@ -326,9 +328,17 @@ public class RoomStateService {
     /**
      * Charge les vêtements équipés depuis la DB et retourne la map slot → sprite.
      * Ex : { "hair" → "hair7", "hat" → "hat_april1" }
+     *
+     * Applies the same "tenue de travail" overlay as game-api's
+     * WorkOutfitService (that class can't be shared across services, so the
+     * rule is duplicated here — keep both in sync): when the user's
+     * work_outfit_active flag is set and they have a métier, tshirt/pant/hat
+     * come from the métier's outfit instead of whatever's actually equipped
+     * (hair is the only equipped category kept) — a real overlay over the
+     * DB state, not an unequip, so it never touches UserItem rows.
      */
     public Map<String, String> buildClothingMap(UUID userId) {
-        return userItemRepository
+        Map<String, String> equipped = userItemRepository
                 .findByUserIdAndEquippedTrueAndItemItemType(userId, "CLOTHING")
                 .stream()
                 .filter(ui -> ui.getItem().getSpriteKey() != null && ui.getItem().getSpritePath() != null)
@@ -337,6 +347,26 @@ public class RoomStateService {
                         ui -> ui.getItem().getSpritePath(),
                         (a, b) -> a // en cas de doublon garder le premier
                 ));
+
+        User user = userRepository.findById(userId).orElse(null);
+        Metier metier = user != null ? user.getMetier() : null;
+        if (user == null || !user.isWorkOutfitActive() || metier == null) {
+            return equipped;
+        }
+
+        Map<String, String> overlaid = new HashMap<>();
+        String hair = equipped.get("hair");
+        if (hair != null) overlaid.put("hair", hair);
+        putIfSprited(overlaid, metier.getOutfitTshirt());
+        putIfSprited(overlaid, metier.getOutfitPant());
+        putIfSprited(overlaid, metier.getOutfitHat());
+        return overlaid;
+    }
+
+    private void putIfSprited(Map<String, String> map, Item item) {
+        if (item != null && item.getSpriteKey() != null && item.getSpritePath() != null) {
+            map.put(item.getSpriteKey(), item.getSpritePath());
+        }
     }
 
     /**
