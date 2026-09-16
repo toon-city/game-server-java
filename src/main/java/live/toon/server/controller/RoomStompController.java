@@ -90,18 +90,24 @@ public class RoomStompController {
             }
         }
 
-        // Broadcast to room: user joined
+        // Broadcast to room: user joined. Read back the ConnectedUser
+        // RoomStateService.join() just registered rather than the raw payload —
+        // x/y in particular: join() now spawns at the room's own door
+        // (HouseGeometry), overriding whatever x/y the client sent, and this
+        // broadcast has to agree with that or everyone ELSE in the room sees
+        // the joiner pop in at the client's stale/self-reported guess instead
+        // of the door (the joiner's own view is already correct: it's built
+        // from result.roomState(), the same registered snapshot).
+        var registered = roomStateService.getUser(roomId, user.getUserId().toString());
         messaging.convertAndSend(
                 roomTopic(roomId, "joined"),
                 UserJoinedEvent.builder()
                         .userId(user.getUserId().toString())
                         .username(user.getUsername())
-                        .skinColor(roomStateService.getUser(roomId, user.getUserId().toString())
-                                .map(live.toon.server.model.ConnectedUser::getSkinColor).orElse(0xf7ceaf))
-                        .clothing(roomStateService.getUser(roomId, user.getUserId().toString())
-                                .map(live.toon.server.model.ConnectedUser::getClothing).orElse(java.util.Map.of()))
-                        .x(payload.getX())
-                        .y(payload.getY())
+                        .skinColor(registered.map(live.toon.server.model.ConnectedUser::getSkinColor).orElse(0xf7ceaf))
+                        .clothing(registered.map(live.toon.server.model.ConnectedUser::getClothing).orElse(java.util.Map.of()))
+                        .x(registered.map(live.toon.server.model.ConnectedUser::getX).orElse(payload.getX()))
+                        .y(registered.map(live.toon.server.model.ConnectedUser::getY).orElse(payload.getY()))
                         .direction(payload.getDirection())
                         .gender(user.getGender())
                         .rank(user.getRank())

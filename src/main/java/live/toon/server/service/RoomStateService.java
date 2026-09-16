@@ -1,5 +1,6 @@
 package live.toon.server.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import live.toon.server.dto.event.RoomStateEvent;
 import live.toon.server.entity.Item;
 import live.toon.server.entity.Metier;
@@ -11,6 +12,7 @@ import live.toon.server.model.UserPrincipal;
 import live.toon.server.repository.RoomRepository;
 import live.toon.server.repository.UserItemRepository;
 import live.toon.server.repository.UserRepository;
+import live.toon.server.util.HouseGeometry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,7 @@ public class RoomStateService {
     private final UserItemRepository userItemRepository;
     private final FurnitureStateService furnitureStateService;
     private final RoomAccessService roomAccessService;
+    private final ObjectMapper objectMapper;
 
     /** Mirrors game-types' RoomPermission.OWN / .VIEW ordinals. */
     private static final int PERMISSION_OWN = 2;
@@ -133,6 +136,17 @@ public class RoomStateService {
         ConcurrentHashMap<String, ConnectedUser> roomUsers =
                 rooms.computeIfAbsent(roomId, k -> new ConcurrentHashMap<>());
         Room room = roomOpt.get();
+
+        // Spawn at the room's own door, not wherever the client claims to be —
+        // there's no "last known position" yet for a fresh join, and trusting a
+        // self-reported x/y here let a client claim to spawn anywhere, including
+        // outside the room's walls entirely. Falls back to the client-supplied
+        // x/y only if house_data has no parseable entry door (e.g. a room still
+        // missing a layout) rather than failing the join outright.
+        var doorCenter = HouseGeometry.findDoorCenter(room.getHouseData(), objectMapper);
+        double spawnX = doorCenter.map(HouseGeometry.Point::x).orElse(x);
+        double spawnY = doorCenter.map(HouseGeometry.Point::y).orElse(y);
+
         RoomStateEvent roomState;
 
         // Register the joiner and snapshot the room under the same lock. When two
@@ -151,8 +165,8 @@ public class RoomStateService {
                     .gender(gender)
                     .rank(rank)
                     .toonizLevel(toonizLvl)
-                    .x(x)
-                    .y(y)
+                    .x(spawnX)
+                    .y(spawnY)
                     .direction(direction)
                     .build());
             roomState = snapshotRoom(room, roomUsers.values(), principal.getUserId(), rank);
