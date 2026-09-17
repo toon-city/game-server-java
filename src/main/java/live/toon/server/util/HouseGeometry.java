@@ -36,20 +36,25 @@ public final class HouseGeometry {
     private static final double DEPTH_FACTOR = Math.sqrt(2);
 
     /**
-     * Avatar.x/y is not where the feet touch the ground — game-avatar's
-     * Avatar.ts places the "socle" (ground marker) as a child at a fixed
-     * local offset from the avatar's own origin: {@code socle.position.set(4,
-     * 100)}. That's the socle SPRITE's top-left corner, not its center —
-     * socle.png is 70×20px, so the actual ground-contact point (its center)
-     * sits at local (4 + 70/2, 100) = (39, 100). Using the raw (4, 100) left
-     * the avatar ~36px too far right on screen — confirmed live (Playwright,
-     * Quizz: avatar visibly off-center from the door) and matches 39-4=35.
-     * The Y term (100) needed no correction: cross-checked live on
-     * Discotchat's flat wall by sampling screenshot pixels directly (feet's
-     * last skin-toned row landed within 1px of the wall/floor seam).
+     * Avatar.x/y is not where the feet touch the ground. X: game-avatar's
+     * Avatar.ts places the "socle" (ground marker, hidden in-room) at a
+     * fixed local offset — {@code socle.position.set(4, 100)} is the socle
+     * SPRITE's top-left corner, not its center; socle.png is 70×20px, so
+     * its true center sits at local (4 + 70/2) = 39. Using the raw 4 left
+     * the avatar ~36px too far right on screen (confirmed live, Quizz).
+     *
+     * Y: 100 is the socle's own local y (ankle height), not where the feet's
+     * lowest pixel actually renders. Measured directly off Playwright
+     * screenshots (robust per-column skin-tone scan, requiring 3 consecutive
+     * matching px to reject anti-aliasing noise) on both Quizz and
+     * Discotchat: with 100, feet rendered 11px past the door's threshold
+     * line on both rooms — consistent enough to trust as the sprite's real
+     * local ground line, not per-room noise. 109 (100 + 11) is not
+     * Avatar.ts's own canvas height (120, {@code this.height = 120}) as a
+     * first attempt assumed — the art doesn't reach the full canvas bottom.
      */
     private static final double AVATAR_SOCLE_OFFSET_X = 39;
-    private static final double AVATAR_SOCLE_OFFSET_Y = 100;
+    private static final double AVATAR_SOCLE_OFFSET_Y = 109;
 
     private HouseGeometry() {}
 
