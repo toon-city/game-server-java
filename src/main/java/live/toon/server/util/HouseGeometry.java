@@ -42,11 +42,17 @@ public final class HouseGeometry {
      * collision.ts's buildWallPolygons centers its (solid, door-agnostic —
      * see that file's own comment on why doors no longer carve a gap) wall
      * band on. Spawning a joiner directly on that line reads as "standing in
-     * the wall/doorway" rather than through it. 50 clears the collision
-     * band (8-16px thick, see WALL_THICKNESS in collision.ts) with room to
-     * spare while staying a believable "just stepped in" distance.
+     * the wall/doorway" rather than through it.
+     *
+     * Kept small on purpose: door spans in the recovered public rooms run as
+     * narrow as ~90px end to end (e.g. Quizz), so anything much bigger than
+     * the collision band pushes the spawn out of the door's own footprint
+     * and onto the open floor beside it — confirmed live (Playwright) after
+     * first trying 50, which visibly missed the door. 18 clears the widest
+     * band (16, hidden walls — see WALL_THICKNESS in collision.ts) by 2px,
+     * enough to not re-overlap it, while staying inside the door gap.
      */
-    private static final double DOOR_SPAWN_INSET = 50;
+    private static final double DOOR_SPAWN_INSET = 18;
 
     private HouseGeometry() {}
 
