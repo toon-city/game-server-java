@@ -123,21 +123,28 @@ public final class HouseGeometry {
                 double doorY = pA.y() + off * ny;
 
                 // Nudge inward, off the wall's own line, toward the room's
-                // floor — see DOOR_SPAWN_INSET. Direction comes from the
-                // floor polygon centroid rather than the wall normal because
-                // the normal's sign is arbitrary (depends on ptA→ptB winding,
-                // which isn't guaranteed consistent across walls), while
-                // "toward the floor" is always correct regardless of which
-                // wall or side of the room the door is on.
+                // floor — see DOOR_SPAWN_INSET. Pushed strictly along the
+                // wall's own normal (perpendicular to ptA→ptB), never along
+                // the wall itself, so the door's own midpoint is preserved —
+                // pushing straight toward the floor centroid instead (first
+                // attempt) has a sideways component whenever the centroid
+                // isn't exactly perpendicular from the door, which visibly
+                // knocked the spawn off-center from the door. The centroid
+                // is only used to pick which of the normal's two signs
+                // points into the room (arbitrary otherwise — depends on
+                // ptA→ptB winding, which isn't consistent across walls).
+                double wnx = -ny;
+                double wny = nx;
                 Point floorCentroid = floorCentroid(root.path("floors"), projected);
                 if (floorCentroid != null) {
                     double toFx = floorCentroid.x() - doorX;
                     double toFy = floorCentroid.y() - doorY;
-                    double toFLen = Math.hypot(toFx, toFy);
-                    if (toFLen > 1e-6) {
-                        doorX += toFx / toFLen * DOOR_SPAWN_INSET;
-                        doorY += toFy / toFLen * DOOR_SPAWN_INSET;
+                    if (wnx * toFx + wny * toFy < 0) {
+                        wnx = -wnx;
+                        wny = -wny;
                     }
+                    doorX += wnx * DOOR_SPAWN_INSET;
+                    doorY += wny * DOOR_SPAWN_INSET;
                 }
 
                 return Optional.of(new Point(doorX, doorY));
