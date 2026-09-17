@@ -36,25 +36,6 @@ public final class HouseGeometry {
     private static final double DEPTH_FACTOR = Math.sqrt(2);
 
     /**
-     * How far to nudge the door-center spawn point toward the room's floor
-     * centroid, in world px. Without this, the raw door-center point sits
-     * exactly on the wall segment's own baseline — the same line
-     * collision.ts's buildWallPolygons centers its (solid, door-agnostic —
-     * see that file's own comment on why doors no longer carve a gap) wall
-     * band on. Spawning a joiner directly on that line reads as "standing in
-     * the wall/doorway" rather than through it.
-     *
-     * Kept small on purpose: door spans in the recovered public rooms run as
-     * narrow as ~90px end to end (e.g. Quizz), so anything much bigger than
-     * the collision band pushes the spawn out of the door's own footprint
-     * and onto the open floor beside it — confirmed live (Playwright) after
-     * first trying 50, which visibly missed the door. 18 clears the widest
-     * band (16, hidden walls — see WALL_THICKNESS in collision.ts) by 2px,
-     * enough to not re-overlap it, while staying inside the door gap.
-     */
-    private static final double DOOR_SPAWN_INSET = 18;
-
-    /**
      * Avatar.x/y is not where the feet touch the ground — game-avatar's
      * Avatar.ts places the "socle" (ground marker) as a child at a fixed
      * local offset from the avatar's own origin: {@code socle.position.set(4,
@@ -136,31 +117,11 @@ public final class HouseGeometry {
                 double doorX = pA.x() + off * nx;
                 double doorY = pA.y() + off * ny;
 
-                // Nudge inward, off the wall's own line, toward the room's
-                // floor — see DOOR_SPAWN_INSET. Pushed strictly along the
-                // wall's own normal (perpendicular to ptA→ptB), never along
-                // the wall itself, so the door's own midpoint is preserved —
-                // pushing straight toward the floor centroid instead (first
-                // attempt) has a sideways component whenever the centroid
-                // isn't exactly perpendicular from the door, which visibly
-                // knocked the spawn off-center from the door. The centroid
-                // is only used to pick which of the normal's two signs
-                // points into the room (arbitrary otherwise — depends on
-                // ptA→ptB winding, which isn't consistent across walls).
-                double wnx = -ny;
-                double wny = nx;
-                Point floorCentroid = floorCentroid(root.path("floors"), projected);
-                if (floorCentroid != null) {
-                    double toFx = floorCentroid.x() - doorX;
-                    double toFy = floorCentroid.y() - doorY;
-                    if (wnx * toFx + wny * toFy < 0) {
-                        wnx = -wnx;
-                        wny = -wny;
-                    }
-                    doorX += wnx * DOOR_SPAWN_INSET;
-                    doorY += wny * DOOR_SPAWN_INSET;
-                }
-
+                // Feet land exactly on the door span's own midpoint — no
+                // inward nudge. (An earlier version pushed a few px into the
+                // room to clear the wall's collision band, but that's not
+                // what was asked for: feet aligned dead-center on the door's
+                // bottom segment, full stop.)
                 return Optional.of(new Point(doorX - AVATAR_SOCLE_OFFSET_X, doorY - AVATAR_SOCLE_OFFSET_Y));
             }
             return Optional.empty();
@@ -168,22 +129,6 @@ public final class HouseGeometry {
             log.warn("Failed to parse house_data for door center: {}", e.getMessage());
             return Optional.empty();
         }
-    }
-
-    /** Centroid of every vertex referenced by any {@code floors[].points[]} entry, or null if none. */
-    private static Point floorCentroid(JsonNode floors, Point[] projected) {
-        double sumX = 0, sumY = 0;
-        int count = 0;
-        for (JsonNode floor : floors) {
-            for (JsonNode idxNode : floor.path("points")) {
-                int idx = idxNode.asInt(-1);
-                if (idx < 0 || idx >= projected.length) continue;
-                sumX += projected[idx].x();
-                sumY += projected[idx].y();
-                count++;
-            }
-        }
-        return count == 0 ? null : new Point(sumX / count, sumY / count);
     }
 
     private static Point rotateMinus90(double x, double y) {
