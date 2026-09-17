@@ -39,14 +39,16 @@ public final class HouseGeometry {
      * Avatar.x/y is not where the feet touch the ground — game-avatar's
      * Avatar.ts places the "socle" (ground marker) as a child at a fixed
      * local offset from the avatar's own origin: {@code socle.position.set(4,
-     * 100)}. So an avatar spawned with y = doorY has its feet rendered 100px
-     * further from the wall than intended (and 4px sideways) — confirmed
-     * live: the previous door-center fix looked right numerically but the
-     * avatar visibly stood ~100px past the wall on screen. Subtracting this
-     * offset here makes the *feet*, not the sprite origin, land on the
-     * inset door point.
+     * 100)}. That's the socle SPRITE's top-left corner, not its center —
+     * socle.png is 70×20px, so the actual ground-contact point (its center)
+     * sits at local (4 + 70/2, 100) = (39, 100). Using the raw (4, 100) left
+     * the avatar ~36px too far right on screen — confirmed live (Playwright,
+     * Quizz: avatar visibly off-center from the door) and matches 39-4=35.
+     * The Y term (100) needed no correction: cross-checked live on
+     * Discotchat's flat wall by sampling screenshot pixels directly (feet's
+     * last skin-toned row landed within 1px of the wall/floor seam).
      */
-    private static final double AVATAR_SOCLE_OFFSET_X = 4;
+    private static final double AVATAR_SOCLE_OFFSET_X = 39;
     private static final double AVATAR_SOCLE_OFFSET_Y = 100;
 
     private HouseGeometry() {}
