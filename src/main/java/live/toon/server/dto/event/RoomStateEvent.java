@@ -53,6 +53,8 @@ public class RoomStateEvent {
         private String spriteKey;
         private String spritePath;
         private String subType;
+        /** Old game's STYPE (18/19/20) — see game-api's Item.renderType. */
+        private int type;
         private double x;
         private double y;
         private int orientation;

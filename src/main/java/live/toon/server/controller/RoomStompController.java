@@ -248,6 +248,7 @@ public class RoomStompController {
                             .spriteKey(result.spriteKey())
                             .spritePath(result.spritePath())
                             .subType(result.subType())
+                            .type(result.renderType())
                             .x(payload.getX())
                             .y(payload.getY())
                             .orientation(payload.getOrientation())

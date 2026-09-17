@@ -151,7 +151,8 @@ public class FurnitureStateService {
                 item.getDisplayImage(),
                 item.getSpriteKey(),
                 item.getSpritePath(),
-                item.getSubType());
+                item.getSubType(),
+                item.getRenderType());
     }
 
     private FurnitureSnapshot toSnapshot(UserItem ui) {
@@ -164,6 +165,7 @@ public class FurnitureStateService {
                 .spriteKey(item.getSpriteKey())
                 .spritePath(item.getSpritePath())
                 .subType(item.getSubType())
+                .type(item.getRenderType())
                 .x(ui.getX())
                 .y(ui.getY())
                 .orientation(ui.getOrientation())
@@ -175,5 +177,5 @@ public class FurnitureStateService {
      *  name/displayImage let the client show a preview (click outside edit mode) without a
      *  separate item lookup — see FurniturePreviewService/'furniture:click' in game-web. */
     public record PlaceResult(String instanceId, long baseId, String name, String displayImage,
-                               String spriteKey, String spritePath, String subType) {}
+                               String spriteKey, String spritePath, String subType, int renderType) {}
 }

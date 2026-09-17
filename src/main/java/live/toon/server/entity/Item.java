@@ -40,6 +40,10 @@ public class Item {
     @Column(name = "sprite_path", length = 255)
     private String spritePath;
 
+    /** Old game's STYPE (18/19/20) — see game-api's Item.renderType for the full comment. */
+    @Column(name = "render_type", nullable = false)
+    private int renderType;
+
     /** Chemin relatif/URL vers l'image d'affichage — utilisé par l'aperçu de meuble (clic hors édition). */
     @Column(name = "display_image", length = 255)
     private String displayImage;
