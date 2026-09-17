@@ -54,6 +54,20 @@ public final class HouseGeometry {
      */
     private static final double DOOR_SPAWN_INSET = 18;
 
+    /**
+     * Avatar.x/y is not where the feet touch the ground — game-avatar's
+     * Avatar.ts places the "socle" (ground marker) as a child at a fixed
+     * local offset from the avatar's own origin: {@code socle.position.set(4,
+     * 100)}. So an avatar spawned with y = doorY has its feet rendered 100px
+     * further from the wall than intended (and 4px sideways) — confirmed
+     * live: the previous door-center fix looked right numerically but the
+     * avatar visibly stood ~100px past the wall on screen. Subtracting this
+     * offset here makes the *feet*, not the sprite origin, land on the
+     * inset door point.
+     */
+    private static final double AVATAR_SOCLE_OFFSET_X = 4;
+    private static final double AVATAR_SOCLE_OFFSET_Y = 100;
+
     private HouseGeometry() {}
 
     public record Point(double x, double y) {}
@@ -147,7 +161,7 @@ public final class HouseGeometry {
                     doorY += wny * DOOR_SPAWN_INSET;
                 }
 
-                return Optional.of(new Point(doorX, doorY));
+                return Optional.of(new Point(doorX - AVATAR_SOCLE_OFFSET_X, doorY - AVATAR_SOCLE_OFFSET_Y));
             }
             return Optional.empty();
         } catch (Exception e) {
