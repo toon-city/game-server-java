@@ -179,6 +179,22 @@ public class RoomStompController {
                         .build());
     }
 
+    // ─── /app/avatar/emote ───────────────────────────────────────────────────
+    // Same shape as avatar/say: no persistence, no validation — a cosmetic,
+    // ephemeral broadcast (client discards unrecognized `kind` values).
+
+    @MessageMapping("/avatar/emote")
+    public void avatarEmote(@Payload AvatarEmotePayload payload, Principal principal) {
+        UserPrincipal user = extractPrincipal(principal);
+        messaging.convertAndSend(
+                roomTopic(payload.getRoomId(), "avatar-emote"),
+                AvatarEmoteEvent.builder()
+                        .userId(user.getUserId().toString())
+                        .kind(payload.getKind())
+                        .value(payload.getValue())
+                        .build());
+    }
+
     // ─── /app/chat ───────────────────────────────────────────────────────────
 
     @MessageMapping("/chat")
