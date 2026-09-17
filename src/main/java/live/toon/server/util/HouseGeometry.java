@@ -35,6 +35,19 @@ public final class HouseGeometry {
     private static final double ANGLE = -Math.PI / 4;
     private static final double DEPTH_FACTOR = Math.sqrt(2);
 
+    /**
+     * How far to nudge the door-center spawn point toward the room's floor
+     * centroid, in world px. Without this, the raw door-center point sits
+     * exactly on the wall segment's own baseline — the same line
+     * collision.ts's buildWallPolygons centers its (solid, door-agnostic —
+     * see that file's own comment on why doors no longer carve a gap) wall
+     * band on. Spawning a joiner directly on that line reads as "standing in
+     * the wall/doorway" rather than through it. 50 clears the collision
+     * band (8-16px thick, see WALL_THICKNESS in collision.ts) with room to
+     * spare while staying a believable "just stepped in" distance.
+     */
+    private static final double DOOR_SPAWN_INSET = 50;
+
     private HouseGeometry() {}
 
     public record Point(double x, double y) {}
@@ -100,13 +113,50 @@ public final class HouseGeometry {
                 // as off ± doorWidth/2 along the wall, which average back out
                 // to exactly pA + off*(nx,ny); the door's width only affects
                 // the span's extent, not its midpoint, so it's not needed here.
-                return Optional.of(new Point(pA.x() + off * nx, pA.y() + off * ny));
+                double doorX = pA.x() + off * nx;
+                double doorY = pA.y() + off * ny;
+
+                // Nudge inward, off the wall's own line, toward the room's
+                // floor — see DOOR_SPAWN_INSET. Direction comes from the
+                // floor polygon centroid rather than the wall normal because
+                // the normal's sign is arbitrary (depends on ptA→ptB winding,
+                // which isn't guaranteed consistent across walls), while
+                // "toward the floor" is always correct regardless of which
+                // wall or side of the room the door is on.
+                Point floorCentroid = floorCentroid(root.path("floors"), projected);
+                if (floorCentroid != null) {
+                    double toFx = floorCentroid.x() - doorX;
+                    double toFy = floorCentroid.y() - doorY;
+                    double toFLen = Math.hypot(toFx, toFy);
+                    if (toFLen > 1e-6) {
+                        doorX += toFx / toFLen * DOOR_SPAWN_INSET;
+                        doorY += toFy / toFLen * DOOR_SPAWN_INSET;
+                    }
+                }
+
+                return Optional.of(new Point(doorX, doorY));
             }
             return Optional.empty();
         } catch (Exception e) {
             log.warn("Failed to parse house_data for door center: {}", e.getMessage());
             return Optional.empty();
         }
+    }
+
+    /** Centroid of every vertex referenced by any {@code floors[].points[]} entry, or null if none. */
+    private static Point floorCentroid(JsonNode floors, Point[] projected) {
+        double sumX = 0, sumY = 0;
+        int count = 0;
+        for (JsonNode floor : floors) {
+            for (JsonNode idxNode : floor.path("points")) {
+                int idx = idxNode.asInt(-1);
+                if (idx < 0 || idx >= projected.length) continue;
+                sumX += projected[idx].x();
+                sumY += projected[idx].y();
+                count++;
+            }
+        }
+        return count == 0 ? null : new Point(sumX / count, sumY / count);
     }
 
     private static Point rotateMinus90(double x, double y) {
