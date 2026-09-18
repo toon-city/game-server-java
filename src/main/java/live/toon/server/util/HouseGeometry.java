@@ -124,11 +124,44 @@ public final class HouseGeometry {
                 double doorX = pA.x() + off * nx;
                 double doorY = pA.y() + off * ny;
 
-                // Feet land exactly on the door span's own midpoint — no
-                // inward nudge. (An earlier version pushed a few px into the
-                // room to clear the wall's collision band, but that's not
-                // what was asked for: feet aligned dead-center on the door's
-                // bottom segment, full stop.)
+                // Every wall -- door included -- is a solid collision band
+                // centred on its own line (game-core/src/utils/collision.ts's
+                // buildWallPolygons, +-WALL_THICKNESS/2 = +-4px either side).
+                // Landing feet EXACTLY on that line, which a truly zero-inset
+                // spawn does, puts the avatar's hitbox straddling solid
+                // collision on both sides: checkCollision blocks every
+                // direction that would finish crossing it, so a fresh join
+                // could step out of the room but never further in (confirmed
+                // live, Discotchat: blocked moving deeper in, free moving
+                // back out -- and once through, moving back toward the door
+                // is correctly blocked too, per this file's own "never able
+                // to cross it the other way" rule in collision.ts).
+                //
+                // Nudging the FEET target along the wall's inward normal
+                // (toward the room polygon's own centroid, so it works for
+                // any wall angle) clears the band. This is NOT the same
+                // fix as the 18-50px insets tried and rejected earlier in
+                // this file's history -- those visibly pushed the avatar
+                // away from the door itself (measured against the door's own
+                // position); this pushes it past an invisible collision
+                // strip a few px wide, verified against the live
+                // checkCollision result (not just eyeballed) at each
+                // candidate value: 10 still landed inside the band (blocked
+                // on every side, including the one it was meant to clear),
+                // 18 lands just past its far edge.
+                double perpX = -ny, perpY = nx;
+                double centroidX = 0, centroidY = 0;
+                for (Point p : projected) { centroidX += p.x(); centroidY += p.y(); }
+                centroidX /= projected.length;
+                centroidY /= projected.length;
+                if (perpX * (centroidX - doorX) + perpY * (centroidY - doorY) < 0) {
+                    perpX = -perpX;
+                    perpY = -perpY;
+                }
+                final double COLLISION_BAND_CLEARANCE = 18;
+                doorX += perpX * COLLISION_BAND_CLEARANCE;
+                doorY += perpY * COLLISION_BAND_CLEARANCE;
+
                 return Optional.of(new Point(doorX - AVATAR_SOCLE_OFFSET_X, doorY - AVATAR_SOCLE_OFFSET_Y));
             }
             return Optional.empty();
