@@ -18,6 +18,8 @@ public class ConnectedUser {
     private int direction;
     /** Couleur de peau (ex: 0xf7ceaf). */
     private int skinColor;
+    /** Couleur de cheveux (0xffffff = pas de teinte, garde la couleur dessinée). */
+    private int hairColor;
     /** Vêtements équipés : spriteKey → spritePath (ex: "hair" → "hair7"). */
     private Map<String, String> clothing;
     /** MALE, FEMALE, NON_BINARY — may be null */

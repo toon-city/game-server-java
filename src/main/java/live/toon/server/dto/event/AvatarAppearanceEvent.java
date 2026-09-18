@@ -11,5 +11,6 @@ import java.util.Map;
 public class AvatarAppearanceEvent {
     private String userId;
     private int skinColor;
+    private int hairColor;
     private Map<String, String> clothing;
 }

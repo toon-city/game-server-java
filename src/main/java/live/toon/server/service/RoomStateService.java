@@ -130,6 +130,7 @@ public class RoomStateService {
         int    rank      = dbUser != null ? dbUser.getRank()        : principal.getRank();
         int    toonizLvl = dbUser != null ? dbUser.getToonizLevel() : principal.getToonizLevel();
         int    skinColor = dbUser != null && dbUser.getSkinColor() != null ? dbUser.getSkinColor() : 0xf7ceaf;
+        int    hairColor = dbUser != null && dbUser.getHairColor() != null ? dbUser.getHairColor() : 0xffffff;
 
         // ── Charger les vêtements équipés depuis la DB ────────────────────────
         Map<String, String> clothing = buildClothingMap(principal.getUserId());
@@ -162,6 +163,7 @@ public class RoomStateService {
                     .username(principal.getUsername())
                     .sessionId(sessionId)
                     .skinColor(skinColor)
+                    .hairColor(hairColor)
                     .clothing(clothing)
                     .gender(gender)
                     .rank(rank)
@@ -309,6 +311,7 @@ public class RoomStateService {
                         .userId(u.getUserId().toString())
                         .username(u.getUsername())
                         .skinColor(u.getSkinColor())
+                        .hairColor(u.getHairColor())
                         .clothing(u.getClothing())
                         .x(u.getX())
                         .y(u.getY())

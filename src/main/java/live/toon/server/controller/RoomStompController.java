@@ -107,6 +107,7 @@ public class RoomStompController {
                         .userId(user.getUserId().toString())
                         .username(user.getUsername())
                         .skinColor(registered.map(live.toon.server.model.ConnectedUser::getSkinColor).orElse(0xf7ceaf))
+                        .hairColor(registered.map(live.toon.server.model.ConnectedUser::getHairColor).orElse(0xffffff))
                         .clothing(registered.map(live.toon.server.model.ConnectedUser::getClothing).orElse(java.util.Map.of()))
                         .x(registered.map(live.toon.server.model.ConnectedUser::getX).orElse(payload.getX()))
                         .y(registered.map(live.toon.server.model.ConnectedUser::getY).orElse(payload.getY()))
@@ -435,6 +436,7 @@ public class RoomStompController {
                     AvatarAppearanceEvent.builder()
                             .userId(userId)
                             .skinColor(cu.getSkinColor())
+                            .hairColor(cu.getHairColor())
                             .clothing(cu.getClothing())
                             .build()));
     }

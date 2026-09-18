@@ -54,6 +54,10 @@ public class User {
     @Column(name = "skin_color")
     private Integer skinColor;
 
+    /** Couleur de cheveux de l'avatar (valeur hexadécimale). */
+    @Column(name = "hair_color")
+    private Integer hairColor;
+
     /** Mirrors game-api's ban flag — read-only here, used to reject STOMP CONNECT. */
     @Column(nullable = false)
     private boolean banned = false;

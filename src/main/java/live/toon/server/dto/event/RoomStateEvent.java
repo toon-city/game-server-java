@@ -33,6 +33,7 @@ public class RoomStateEvent {
         private String userId;
         private String username;
         private int skinColor;
+        private int hairColor;
         private Map<String, String> clothing;
         private double x;
         private double y;
